@@ -289,10 +289,16 @@ class AuthControllerCore extends FrontController
 			$customer = new Customer();
 			$authentication = $customer->getByEmail(trim($email), trim($passwd));
 			if (!$authentication || !$customer->id)
+			{
+				sleep(2); // handle brute force attack
 				$this->errors[] = Tools::displayError('Authentication failed.');
+			}
 			else
 			{
-				$this->context->cookie->id_compare = isset($this->context->cookie->id_compare) ? $this->context->cookie->id_compare: CompareProduct::getIdCompareByIdCustomer($customer->id);
+				$this->context->cookie->id_compare = 
+					isset($this->context->cookie->id_compare) ? 
+						$this->context->cookie->id_compare
+						: CompareProduct::getIdCompareByIdCustomer($customer->id);
 				$this->context->cookie->id_customer = (int)($customer->id);
 				$this->context->cookie->customer_lastname = $customer->lastname;
 				$this->context->cookie->customer_firstname = $customer->firstname;
@@ -305,12 +311,46 @@ class AuthControllerCore extends FrontController
 				// Add customer to the context
 				$this->context->customer = $customer;
 				
-				if (Configuration::get('PS_CART_FOLLOWING') && (empty($this->context->cookie->id_cart) || Cart::getNbProducts($this->context->cookie->id_cart) == 0) && $id_cart = (int)Cart::lastNoneOrderedCart($this->context->customer->id))
+				if (Configuration::get('PS_CART_FOLLOWING') 
+						&& (empty($this->context->cookie->id_cart) 
+					|| Cart::getNbProducts($this->context->cookie->id_cart) == 0) 
+						&& $id_cart = (int)Cart::lastNoneOrderedCart($this->context->customer->id))
 					$this->context->cart = new Cart($id_cart);
 				else
 				{
-					$this->context->cart->id_carrier = 0;
-					$this->context->cart->setDeliveryOption(null);
+					// We don't want to lose the choice of carrier made in carriercompare
+					// In this case we have a delivery option set with address_id=0 
+					// (since we don't know the address yet, just the country)
+					// I suppose it wouldn't happen in other situations?
+					if (isset($this->context->cart->id_carrier) && ($this->context->cart->id_carrier != 0))
+					{	
+						//	id_carrier is set 
+						$delivery_option = $this->context->cart->getDeliveryOption(null, true);
+						if (!is_null($delivery_option))
+						{	// a delivery option is set
+							foreach ($delivery_option as $id_address => $key)
+							{
+								// only reset if not selected in carriercompare
+								if ($id_address != 0)
+								{
+									$this->context->cart->id_carrier = 0;
+									$this->context->cart->setDeliveryOption(null);
+								}
+								break;
+							}
+							unset($id_address);
+						}
+						else
+						{
+							$this->context->cart->id_carrier = 0;
+							$this->context->cart->setDeliveryOption(null);
+						}
+					}
+					else
+					{
+						$this->context->cart->id_carrier = 0;
+						$this->context->cart->setDeliveryOption(null);
+					}
 					$this->context->cart->id_address_delivery = Address::getFirstCustomerAddressId((int)($customer->id));
 					$this->context->cart->id_address_invoice = Address::getFirstCustomerAddressId((int)($customer->id));
 				}

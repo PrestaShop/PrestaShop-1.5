@@ -1182,28 +1182,55 @@ class CarrierCore extends ObjectModel
 	 */
 	public static function getAvailableCarrierList(Product $product, $id_warehouse, $id_address_delivery = null, $id_shop = null, $cart = null)
 	{
+		// parameters otherwise context
 		if (is_null($id_shop))
 			$id_shop = Context::getContext()->shop->id;
 		if (is_null($cart))
 			$cart = Context::getContext()->cart;
-			
-		$id_address = (int)((!is_null($id_address_delivery) && $id_address_delivery != 0) ? $id_address_delivery :  $cart->id_address_delivery);
+		
+		// $id_address_delivery
+		if (!is_null($id_address_delivery) && $id_address_delivery != 0)
+		{   // if address is given as parameter use it
+			$id_address = (int) $id_address_delivery;
+		}
+		else
+		{   // else use the address from the cart
+			$id_address = (int) $cart->id_address_delivery;
+		}
 		if ($id_address)
-		{
+		{	// I got an address either as parameter or from the cart
 			$address = new Address($id_address);
 			$id_zone = Address::getZoneById($address->id);
-			
+
 			// Check the country of the address is activated
 			if (!Address::isCountryActiveById($address->id))
 				return array();
 		}
-		else
+		else // we have no address neither from the parameters nor from the cart
 		{
-			$country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'));
+			/* Try get the country from the cookie
+			Page 1 of checkout, if the user is not logged in, we don't have any address yet.
+			His choice of the country in carriercompare is the first time he tells us 
+			where he is (beside geolocation). Carriercompare stores it into the cookie. 
+			We must take the country from the cookie so getAvailableCarrierList 
+			returns the chosen carrier as available, otherwise it can't be selected */
+			if (!isset($cookie) || !$cookie)
+				$cookie = Context::getContext()->cookie;
+			if (isset($cookie->id_country))
+			{
+				$country = new Country($cookie->id_country);
+			}
+			else
+			{
+				// take the shop's default country : 
+				$country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'));
+				// it sucks, it should return an error (null)!!!
+				// but if we change this here, there will be plenty of crashes to fix!
+			}
 			$id_zone = $country->id_zone;
 		}
 
-		// Does the product is linked with carriers?
+		// Is the product linked with carriers?
 		$query = new DbQuery();
 		$query->select('id_carrier');
 		$query->from('product_carrier', 'pc');

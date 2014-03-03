@@ -120,22 +120,24 @@ class CarrierCompare extends Module
 		
 		$refresh_method = Configuration::get('SE_RERESH_METHOD');
 		
+		// country <- cookie
 		if(isset($this->context->cookie->id_country) && $this->context->cookie->id_country > 0)
 			$id_country = (int)$this->context->cookie->id_country;
+		// else géoloc
 		if(!isset($id_country))
 			$id_country = (isset($this->context->customer->geoloc_id_country) ? (int)$this->context->customer->geoloc_id_country : (int)Configuration::get('PS_COUNTRY_DEFAULT'));
+		// if client adresse is known, it overrides
 		if (isset($this->context->customer->id) && $this->context->customer->id && isset($this->context->cart->id_address_delivery) && $this->context->cart->id_address_delivery)
 		{
 			$address = new Address((int)($this->context->cart->id_address_delivery));
 			$id_country = (int)$address->id_country;
 		}			
 			
-			
 		if(isset($this->context->cookie->id_state) && $this->context->cookie->id_state > 0)
 			$id_state = (int)$this->context->cookie->id_state;
 		if(!isset($id_state))
 			$id_state = (isset($this->context->customer->geoloc_id_state) ? (int)$this->context->customer->geoloc_id_state : 0);	
-			
+
 		if(isset($this->context->cookie->postcode) && $this->context->cookie->postcode > 0)
 			$zipcode = Tools::safeOutput($this->context->cookie->postcode);
 		if(!isset($zipcode))
@@ -186,7 +188,8 @@ class CarrierCompare extends Module
 			$id_zone = State::getIdZone($id_state);
 		if (!$id_zone)
 			$id_zone = Country::getIdZone($id_country);
-
+		// zip code is not taken into account for carrier selection
+		// although the FO says the opposite
 		// Need to set the infos for carrier module !
 		$this->context->cookie->id_country = $id_country;
 		$this->context->cookie->id_state = $id_state;
@@ -201,17 +204,17 @@ class CarrierCompare extends Module
 	{
 		$errors = array();
 
-		if (!Validate::isInt($id_state))
+		// unused
+		/*if (!Validate::isInt($id_state))
 			$errors[] = $this->l('Invalid State ID');
 		if ($id_state != 0 && !Validate::isLoadedObject(new State($id_state)))
-			$errors[] = $this->l('Please select a state');
+			$errors[] = $this->l('Please select a state');*/
 		if (!Validate::isInt($id_country) || !Validate::isLoadedObject(new Country($id_country)))
 			$errors[] = $this->l('Please select a country');
-		if (!$this->checkZipcode($zipcode, $id_country))
-			$errors[] = $this->l('Depending on your country selection, please use a valid zip/postal code.');
+		/*if (!$this->checkZipcode($zipcode, $id_country))   // zip is not used
+			$errors[] = $this->l('Depending on your country selection, please use a valid zip/postal code.');*/
 		if (!Validate::isInt($id_carrier) || !Validate::isLoadedObject(new Carrier($id_carrier)))
 			$errors[] = $this->l('Please select a carrier');
-
 		if (sizeof($errors))
 			return $errors;
 
@@ -220,7 +223,6 @@ class CarrierCompare extends Module
 			$ids_carrier[] = $carrier['id_carrier'];
 		if (!in_array($id_carrier, $ids_carrier))
 			$errors[] = $this->l('The carrier ID isn\'t available for your selection');
-
 		if (sizeof($errors))
 			return $errors;
 
@@ -234,8 +236,10 @@ class CarrierCompare extends Module
 		$id_carrier = (string)$id_carrier;
 		$id_carrier .= ',';
 		foreach ($delivery_option_list as $id_address => $options)
+		{
 			if (isset($options[$id_carrier]))
 				$this->context->cart->setDeliveryOption(array($id_address => $id_carrier));	
+		}
 				
 		if (!$this->context->cart->update())
 			return array($this->l('Cannot update the shopping cart.'));				

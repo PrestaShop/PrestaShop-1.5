@@ -790,9 +790,14 @@ class CartRuleCore extends ObjectModel
 			if ($this->reduction_percent && $this->reduction_product == 0)
 			{
 				// Do not give a reduction on free products!
+				// It's written "on the whole order", but we can't include shipping 
+				// otherwise it makes an infinite recursion!!!!
 				$order_total = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package_products);
 				foreach ($context->cart->getCartRules(CartRule::FILTER_ACTION_GIFT) as $cart_rule)
-					$order_total -= Tools::ps_round($cart_rule['obj']->getContextualValue($use_tax, $context, CartRule::FILTER_ACTION_GIFT, $package), 2);
+					$order_total -= Tools::ps_round(
+							$cart_rule['obj']->getContextualValue(
+								$use_tax, $context, CartRule::FILTER_ACTION_GIFT, $package),
+							2);
 
 				$reduction_value += $order_total * $this->reduction_percent / 100;
 			}

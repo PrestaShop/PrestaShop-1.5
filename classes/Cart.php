@@ -1538,7 +1538,16 @@ class CartCore extends ObjectModel
 
 				// If the cart rule offers a reduction, the amount is prorated (with the products in the package)
 				if ($cart_rule['obj']->reduction_percent > 0 || $cart_rule['obj']->reduction_amount > 0)
-					$order_total_discount += Tools::ps_round($cart_rule['obj']->getContextualValue($with_taxes, $virtual_context, CartRule::FILTER_ACTION_REDUCTION, $package, $use_cache), 2);
+				{
+					$order_total_discount += 
+						Tools::ps_round(
+							$cart_rule['obj']->getContextualValue($with_taxes, 
+																$virtual_context, 
+																CartRule::FILTER_ACTION_REDUCTION, 
+																$package, $use_cache),
+										2)
+					;
+				}
 			}
 			$order_total_discount = min(Tools::ps_round($order_total_discount, 2), $wrapping_fees + $order_total_products + $shipping_fees);
 			$order_total -= $order_total_discount;
@@ -1643,7 +1652,7 @@ class CartCore extends ObjectModel
 				$warehouse_list = Warehouse::getProductWarehouseList($product['id_product'], $product['id_product_attribute'], $this->id_shop);
 				if (count($warehouse_list) == 0)
 					$warehouse_list = Warehouse::getProductWarehouseList($product['id_product'], $product['id_product_attribute']);
-				// Does the product is in stock ?
+				// Is the product in stock ?
 				// If yes, get only warehouse where the product is in stock
 
 				$warehouse_in_stock = array();
@@ -1749,6 +1758,7 @@ class CartCore extends ObjectModel
 			{
 				if (!isset($grouped_by_carriers[$id_address_delivery][$key]))
 					$grouped_by_carriers[$id_address_delivery][$key] = array();
+
 				foreach ($warehouse_list as $id_warehouse => $product_list)
 				{
 					if (!isset($grouped_by_carriers[$id_address_delivery][$key][$id_warehouse]))
@@ -2324,6 +2334,7 @@ class CartCore extends ObjectModel
 			return;
 		}
 		Cache::clean('getContextualValue_*');
+
 		$delivery_option_list = $this->getDeliveryOptionList(null, true);
 
 		foreach ($delivery_option_list as $id_address => $options)
@@ -2359,10 +2370,13 @@ class CartCore extends ObjectModel
 	public function getDeliveryOption($default_country = null, $dontAutoSelectOptions = false, $use_cache = true)
 	{
 		static $cache = array();
-		$cache_id = (int)(is_object($default_country) ? $default_country->id : 0).'-'.(int)$dontAutoSelectOptions;
+		$cache_id = (int)(is_object($default_country) ? 
+								$default_country->id 
+							: 	0)
+						.'-'.(int)$dontAutoSelectOptions;
 		if (isset($cache[$cache_id]) && $use_cache)
 			return $cache[$cache_id];
-		
+
 		$delivery_option_list = $this->getDeliveryOptionList($default_country);
 
 		// The delivery option was selected
@@ -2371,11 +2385,37 @@ class CartCore extends ObjectModel
 			$delivery_option = Tools::unSerialize($this->delivery_option);
 			$validated = true;
 			foreach ($delivery_option as $id_address => $key)
-				if (!isset($delivery_option_list[$id_address][$key]))
+			{	
+				if ($id_address != 0) 
+				{ // not preselected in carriercompare before having an address
+					$update=false;
+					$index=$id_address;
+				} // $id_address == 0 (carrier preselected in carriercompare before having an address)
+				elseif (isset($this->id_address_delivery) && $this->id_address_delivery)
+				{ // preselected in carriercompare and now we have an address
+					$update=true;
+					$index=$this->id_address_delivery;
+				}
+				else // preselected in carriercompare and no address in cart yet
+				{
+					$update=false;
+					$index=$id_address;
+				}
+				if (!isset($delivery_option_list[$index][$key]))
 				{
 					$validated = false;
 					break;
 				}
+				else //validated
+				{
+					if ($update)
+					{  // update Delivery option with the adress
+						$delivery_option[$index] = $delivery_option[0];
+						unset($delivery_option[0]);
+						$this->setDeliveryOption($delivery_option);
+					}
+				}
+			}
 
 			if ($validated)
 			{
@@ -2387,7 +2427,9 @@ class CartCore extends ObjectModel
 		if ($dontAutoSelectOptions)
 			return false;
 
-		// No delivery option selected or delivery option selected is not valid, get the better for all options
+		// No delivery option selected or delivery option selected is not valid, 
+		// get the better for all options
+		// I will select myself
 		$delivery_option = array();
 		foreach ($delivery_option_list as $id_address => $options)
 		{
@@ -2502,20 +2544,23 @@ class CartCore extends ObjectModel
 	 *
 	 * @return float Shipping total
 	 */
+	 // This method is too long to be understandable, it should be split
 	public function getPackageShippingCost($id_carrier = null, $use_tax = true, Country $default_country = null, $product_list = null, $id_zone = null)
 	{
 		if ($this->isVirtualCart())
 			return 0;
 
+		// $default_country
 		if (!$default_country)
 			$default_country = Context::getContext()->country;
 
-		$complete_product_list = $this->getProducts();
+		// $products
 		if (is_null($product_list))
-			$products = $complete_product_list;
+			$products = $this->getProducts();
 		else
 			$products = $product_list;
 
+		// $address_id
 		if (Configuration::get('PS_TAX_ADDRESS_TYPE') == 'id_address_invoice')
 			$address_id = (int)$this->id_address_invoice;
 		elseif (count($product_list))
@@ -2528,6 +2573,7 @@ class CartCore extends ObjectModel
 		if (!Address::addressExists($address_id))
 			$address_id = null;
 
+		// cache
 		$cache_id = 'getPackageShippingCost_'.(int)$this->id.'_'.(int)$address_id.'_'.(int)$id_carrier.'_'.(int)$use_tax.'_'.(int)$default_country->id;
 		if ($products)
 			foreach ($products as $product)
@@ -2537,54 +2583,70 @@ class CartCore extends ObjectModel
 			return Cache::retrieve($cache_id);
 
 		// Order total in default currency without fees
-		$order_total = $this->getOrderTotal(true, Cart::ONLY_PHYSICAL_PRODUCTS_WITHOUT_SHIPPING, $product_list);
+		$order_total = $this->getOrderTotal(true, 
+								Cart::ONLY_PHYSICAL_PRODUCTS_WITHOUT_SHIPPING, $product_list);
 
 		// Start with shipping cost at 0
 		$shipping_cost = 0;
 		// If no product added, return 0
 		if (!count($products))
 		{
-			Cache::store($cache_id, $shipping_cost);
-			return $shipping_cost;
+			Cache::store($cache_id, 0);
+			return 0;
 		}
 
+		// zone
 		if(!isset($id_zone))
 		{
 			// Get id zone
 			if (!$this->isMultiAddressDelivery()
-				&& isset($this->id_address_delivery) // Be carefull, id_address_delivery is not usefull one 1.5
+				&& isset($this->id_address_delivery) // Be carefull, id_address_delivery is not usefull one 1.5 ????????
 				&& $this->id_address_delivery
-				&& Customer::customerHasAddress($this->id_customer, $this->id_address_delivery
-			))
+				&& Customer::customerHasAddress($this->id_customer, $this->id_address_delivery)
+				)
 				$id_zone = Address::getZoneById((int)$this->id_address_delivery);
 			else
 			{
 				if (!Validate::isLoadedObject($default_country))
-					$default_country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'), Configuration::get('PS_LANG_DEFAULT'));
-	
-				$id_zone = (int)$default_country->id_zone;
+					$default_country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'), 
+												   Configuration::get('PS_LANG_DEFAULT')
+												   );
+
+				// We don't even have a destination country, but we persist in calculating a 
+				// shipping cost, it should return error!!!
+				$id_zone = (int)$default_country->id_zone; 
 			}
 		}
 
-		if ($id_carrier && !$this->isCarrierInRange((int)$id_carrier, (int)$id_zone))
-			$id_carrier = '';
+		// carrier
+		if ($id_carrier 
+			&& !$this->isCarrierInRange((int)$id_carrier, (int)$id_zone))
+				$id_carrier = '';
 
-		if (empty($id_carrier) && $this->isCarrierInRange((int)Configuration::get('PS_CARRIER_DEFAULT'), (int)$id_zone))
-			$id_carrier = (int)Configuration::get('PS_CARRIER_DEFAULT');
-
-		$total_package_without_shipping_tax_inc = $this->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING, $product_list);
+		if (empty($id_carrier) 
+			&& $this->isCarrierInRange((int)Configuration::get('PS_CARRIER_DEFAULT'),
+									   (int)$id_zone)
+									   )
+				$id_carrier = (int)Configuration::get('PS_CARRIER_DEFAULT');
+		
+		$total_package_without_shipping_tax_inc = 
+			$this->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING, $product_list);//infinite recursion !!!!!!
 		if (empty($id_carrier))
-		{
+		{	// looks like we have no carrier so we'll search for one
 			if ((int)$this->id_customer)
 			{
 				$customer = new Customer((int)$this->id_customer);
-				$result = Carrier::getCarriers((int)Configuration::get('PS_LANG_DEFAULT'), true, false, (int)$id_zone, $customer->getGroups());
+				$result = Carrier::getCarriers(
+							(int)Configuration::get('PS_LANG_DEFAULT'), 
+							true, false, (int)$id_zone, $customer->getGroups());
 				unset($customer);
 			}
 			else
-				$result = Carrier::getCarriers((int)Configuration::get('PS_LANG_DEFAULT'), true, false, (int)$id_zone);
+				$result = Carrier::getCarriers(
+							(int)Configuration::get('PS_LANG_DEFAULT'), 
+							true, false, (int)$id_zone);
 
-			foreach ($result as $k => $row)
+			foreach ($result as $k => $row) // foreach carrier
 			{
 				if ($row['id_carrier'] == Configuration::get('PS_CARRIER_DEFAULT'))
 					continue;
@@ -2595,8 +2657,10 @@ class CartCore extends ObjectModel
 				$carrier = self::$_carriers[$row['id_carrier']];
 
 				// Get only carriers that are compliant with shipping method
-				if (($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT && $carrier->getMaxDeliveryPriceByWeight((int)$id_zone) === false)
-				|| ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE && $carrier->getMaxDeliveryPriceByPrice((int)$id_zone) === false))
+				if (($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT
+						&& $carrier->getMaxDeliveryPriceByWeight((int)$id_zone) === false)
+					|| ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE 
+						&& $carrier->getMaxDeliveryPriceByPrice((int)$id_zone) === false))
 				{
 					unset($result[$k]);
 					continue;
@@ -2607,12 +2671,14 @@ class CartCore extends ObjectModel
 				{
 					$check_delivery_price_by_weight = Carrier::checkDeliveryPriceByWeight($row['id_carrier'], $this->getTotalWeight(), (int)$id_zone);
 
-					$total_order = $total_package_without_shipping_tax_inc;
-					$check_delivery_price_by_price = Carrier::checkDeliveryPriceByPrice($row['id_carrier'], $total_order, (int)$id_zone, (int)$this->id_currency);
+					$check_delivery_price_by_price = 
+						Carrier::checkDeliveryPriceByPrice(
+							$row['id_carrier'], $total_package_without_shipping_tax_inc, 
+							(int)$id_zone, (int)$this->id_currency);
 
 					// Get only carriers that have a range compatible with cart
 					if (($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT && !$check_delivery_price_by_weight)
-					|| ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE && !$check_delivery_price_by_price))
+					 || ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE && !$check_delivery_price_by_price))
 					{
 						unset($result[$k]);
 						continue;
@@ -2622,6 +2688,7 @@ class CartCore extends ObjectModel
 				if ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT)
 					$shipping = $carrier->getDeliveryPriceByWeight($this->getTotalWeight($product_list), (int)$id_zone);
 				else
+					// $order_total is the products amount
 					$shipping = $carrier->getDeliveryPriceByPrice($order_total, (int)$id_zone, (int)$this->id_currency);
 
 				if (!isset($min_shipping_price))
@@ -2680,9 +2747,14 @@ class CartCore extends ObjectModel
 		// Free fees
 		$free_fees_price = 0;
 		if (isset($configuration['PS_SHIPPING_FREE_PRICE']))
-			$free_fees_price = Tools::convertPrice((float)$configuration['PS_SHIPPING_FREE_PRICE'], Currency::getCurrencyInstance((int)$this->id_currency));
-		$orderTotalwithDiscounts = $this->getOrderTotal(true, Cart::BOTH_WITHOUT_SHIPPING, null, null, false);
-		if ($orderTotalwithDiscounts >= (float)($free_fees_price) && (float)($free_fees_price) > 0)
+			$free_fees_price = Tools::convertPrice(
+				(float)$configuration['PS_SHIPPING_FREE_PRICE'], 
+				Currency::getCurrencyInstance((int)$this->id_currency)
+				);
+		$orderTotalwithDiscounts = $this->getOrderTotal(true, 
+									Cart::BOTH_WITHOUT_SHIPPING, null, null, false);
+		if ($orderTotalwithDiscounts >= (float)($free_fees_price) 
+			&& (float)($free_fees_price) > 0)
 		{
 			Cache::store($cache_id, $shipping_cost);
 			return $shipping_cost;
@@ -2710,8 +2782,14 @@ class CartCore extends ObjectModel
 					$id_zone = (int)$default_country->id_zone;
 			}
 
-			if (($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT && !Carrier::checkDeliveryPriceByWeight($carrier->id, $this->getTotalWeight(), (int)$id_zone))
-			|| ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE && !Carrier::checkDeliveryPriceByPrice($carrier->id, $total_package_without_shipping_tax_inc, $id_zone, (int)$this->id_currency)
+			if (($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_WEIGHT 
+					&& !Carrier::checkDeliveryPriceByWeight($carrier->id, $this->getTotalWeight(), (int)$id_zone))
+				|| ($carrier->getShippingMethod() == Carrier::SHIPPING_METHOD_PRICE 
+					&& !Carrier::checkDeliveryPriceByPrice(
+							$carrier->id, 
+							$total_package_without_shipping_tax_inc,
+							$id_zone, 
+							(int)$this->id_currency)
 			))
 				$shipping_cost += 0;
 			else
