@@ -310,7 +310,6 @@ class HookCore extends ObjectModel
 			{
 				$sql->where('(SELECT COUNT(*) FROM '._DB_PREFIX_.'module_shop ms WHERE ms.id_module = m.id_module AND ms.id_shop IN ('.implode(', ', $shop_list).')) = '.count($shop_list));
 				$sql->innerJoin('module_shop', 'ms', 'ms.`id_module` = m.`id_module`');
-				$sql->where('h.name = "displayBackOfficeHeader"');
 			}
 			$sql->innerJoin('hook_module', 'hm', 'hm.`id_module` = m.`id_module`');
 			$sql->innerJoin('hook', 'h', 'hm.`id_hook` = h.`id_hook`');
