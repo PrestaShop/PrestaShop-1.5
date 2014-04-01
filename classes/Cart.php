@@ -2048,12 +2048,9 @@ class CartCore extends ObjectModel
 			// Get all delivery options with a unique carrier
 			foreach ($common_carriers as $id_carrier)
 			{
-				$price = 0;
 				$key = '';
 				$package_list = array();
 				$product_list = array();
-				$total_price_with_tax = 0;
-				$total_price_without_tax = 0;
 				$price_with_tax = 0;
 				$price_without_tax = 0;
 
@@ -2085,6 +2082,25 @@ class CartCore extends ObjectModel
 					$delivery_option_list[$id_address][$key]['unique_carrier'] = (count($delivery_option_list[$id_address][$key]['carrier_list']) <= 1);
 			}
 		}
+		
+		$cart_rules = CartRule::getCustomerCartRules(Context::getContext()->cookie->id_lang, Context::getContext()->cookie->id_customer, true);
+
+		$free_carriers_rules = array();
+		foreach ($cart_rules as $cart_rule)
+		{
+			if ($cart_rule['free_shipping'] && $cart_rule['carrier_restriction'])
+			{
+				$cr = new CartRule((int)$cart_rule['id_cart_rule']);
+				if (Validate::isLoadedObject($cr))
+				{
+					$carriers = $cr->getAssociatedRestrictions('carrier', true, false);
+					if (is_array($carriers) && count($carriers) && isset($carriers['selected']))
+						foreach($carriers['selected'] as $carrier)
+							if (isset($carrier['id_carrier']) && $carrier['id_carrier'])
+								$free_carriers_rules[] = (int)$carrier['id_carrier'];
+				}
+			}
+		}
 
 		// For each delivery options :
 		//    - Set the carrier list
@@ -2100,6 +2116,7 @@ class CartCore extends ObjectModel
 				{
 					$total_price_with_tax += $data['price_with_tax'];
 					$total_price_without_tax += $data['price_without_tax'];
+					$total_price_without_tax_with_rules = (in_array($id_carrier, $free_carriers_rules)) ? 0 : $total_price_without_tax ;
 
 					if (!isset($carrier_collection[$id_carrier]))
 						$carrier_collection[$id_carrier] = new Carrier($id_carrier);
@@ -2114,6 +2131,7 @@ class CartCore extends ObjectModel
 				}
 				$delivery_option_list[$id_address][$key]['total_price_with_tax'] = $total_price_with_tax;
 				$delivery_option_list[$id_address][$key]['total_price_without_tax'] = $total_price_without_tax;
+				$delivery_option_list[$id_address][$key]['is_free'] = !$total_price_without_tax_with_rules ? true : false;
 				$delivery_option_list[$id_address][$key]['position'] = $position / count($value['carrier_list']);
 			}
 
