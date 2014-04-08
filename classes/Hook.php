@@ -281,7 +281,7 @@ class HookCore extends ObjectModel
 	{
 		$context = Context::getContext();
 		$cache_id = 'hook_module_exec_list'.((isset($context->customer)) ? '_'.$context->customer->id : '');
-		if (!Cache::isStored($cache_id) || $hook_name == 'displayPayment')
+		if (!Cache::isStored($cache_id) || $hook_name == 'displayPayment' || $hook_name == 'displayBackOfficeHeader')
 		{
 			$frontend = true;
 			$groups = array();
@@ -306,9 +306,13 @@ class HookCore extends ObjectModel
 			$sql = new DbQuery();
 			$sql->select('h.`name` as hook, m.`id_module`, h.`id_hook`, m.`name` as module, h.`live_edit`');
 			$sql->from('module', 'm');
+			if ($hook_name != 'displayBackOfficeHeader')
+			{
+				$sql->where('(SELECT COUNT(*) FROM '._DB_PREFIX_.'module_shop ms WHERE ms.id_module = m.id_module AND ms.id_shop IN ('.implode(', ', $shop_list).')) = '.count($shop_list));
+				$sql->innerJoin('module_shop', 'ms', 'ms.`id_module` = m.`id_module`');
+			}
 			$sql->innerJoin('hook_module', 'hm', 'hm.`id_module` = m.`id_module`');
 			$sql->innerJoin('hook', 'h', 'hm.`id_hook` = h.`id_hook`');
-			$sql->where('(SELECT COUNT(*) FROM '._DB_PREFIX_.'module_shop ms WHERE ms.id_module = m.id_module AND ms.id_shop IN ('.implode(', ', $shop_list).')) = '.count($shop_list));
 			if ($hook_name != 'displayPayment')
 				$sql->where('h.name != "displayPayment"');
 			// For payment modules, we check that they are available in the contextual country
@@ -350,7 +354,7 @@ class HookCore extends ObjectModel
 						'live_edit' => $row['live_edit'],
 					);
 				}
-			if ($hook_name != 'displayPayment')
+			if ($hook_name != 'displayPayment' && $hook_name != 'displayBackOfficeHeader')
 			{
 				Cache::store($cache_id, $list);
 				// @todo remove this in 1.6, we keep it in 1.5 for retrocompatibility
