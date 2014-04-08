@@ -224,9 +224,9 @@ $(document).ready(function () {
 		<td class="col-left"><label><b>{l s='Final retail price:'}</b></label></td>
 		<td>
 			<span>
-			{$currency->prefix}<span id="finalPrice" style="font-weight: bold;">0.00</span>{$currency->suffix}<span {if $ps_tax}style="display:none;"{/if}> ({l s='tax incl.'})</span>
+			{$currency->prefix}<span id="finalPrice" style="font-weight: bold;">0.00</span>{$currency->suffix}<span{if !$ps_tax} style="display:none;"{/if}> ({l s='tax incl.'})</span>
 			</span>
-			<span {if $ps_tax}style="display:none;"{/if} >
+			<span{if !$ps_tax} style="display:none;"{/if} >
 
 			{if $country_display_tax_label}
 				 /
