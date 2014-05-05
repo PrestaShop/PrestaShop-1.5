@@ -341,8 +341,10 @@ class AdminManufacturersControllerCore extends AdminController
 		$image = ImageManager::thumbnail(_PS_MANU_IMG_DIR_.'/'.$manufacturer->id.'.jpg', $this->table.'_'.(int)$manufacturer->id.'.'.$this->imageType, 350, $this->imageType, true);
 
 		$this->fields_value = array(
-			'image' => $image ? $image : false,
-			'size' => $image ? filesize(_PS_MANU_IMG_DIR_.'/'.$manufacturer->id.'.jpg') / 1000 : false
+			'logo' => array(
+				'image' => $image ? $image : false,
+				'size' => $image ? filesize(_PS_MANU_IMG_DIR_.'/'.$manufacturer->id.'.jpg') / 1000 : false,
+			),
 		);
 
 		foreach ($this->_languages as $language)

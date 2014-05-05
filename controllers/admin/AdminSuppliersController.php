@@ -256,8 +256,8 @@ class AdminSuppliersControllerCore extends AdminController
 
 		// set logo image
 		$image = ImageManager::thumbnail(_PS_SUPP_IMG_DIR_.'/'.$this->object->id.'.jpg', $this->table.'_'.(int)$this->object->id.'.'.$this->imageType, 350, $this->imageType, true);
-		$this->fields_value['image'] = $image ? $image : false;
-		$this->fields_value['size'] = $image ? filesize(_PS_SUPP_IMG_DIR_.'/'.$this->object->id.'.jpg') / 1000 : false;
+		$this->fields_value['logo']['image'] = $image ? $image : false;
+		$this->fields_value['logo']['size'] = $image ? filesize(_PS_SUPP_IMG_DIR_.'/'.$this->object->id.'.jpg') / 1000 : false;
 
 		return parent::renderForm();
 	}
