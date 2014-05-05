@@ -105,7 +105,6 @@
 		{capture name=path}{l s='Your shopping cart'}{/capture}
 		{include file="$tpl_dir./breadcrumb.tpl"}
 		<h2>{l s='Your shopping cart'}</h2>
-		{include file="$tpl_dir./errors.tpl"}
 		<p class="warning">{l s='Your shopping cart is empty.'}</p>
 	{/if}
 {/if}
