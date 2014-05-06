@@ -477,8 +477,8 @@ class ParentOrderControllerCore extends FrontController
 	{	
 		$address = new Address($this->context->cart->id_address_delivery);
 		$id_zone = Address::getZoneById($address->id);
-		$carriers = $this->context->cart->simulateCarriersOutput();
-		$checked = $this->context->cart->simulateCarrierSelectedOutput();
+		$carriers = $this->context->cart->simulateCarriersOutput(null, true);
+		$checked = $this->context->cart->simulateCarrierSelectedOutput(false);
 		$delivery_option_list = $this->context->cart->getDeliveryOptionList();
 		$this->setDefaultCarrierSelection($delivery_option_list);
 
