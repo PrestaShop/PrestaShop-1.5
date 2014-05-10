@@ -2231,7 +2231,7 @@ class CartCore extends ObjectModel
 
 	public function simulateCarrierSelectedOutput($use_cache = true)
 	{
-		$delivery_option = getDeliveryOption(null, false, $use_cache);
+		$delivery_option = $this->getDeliveryOption(null, false, $use_cache);
 
 		if (count($delivery_option) > 1 || empty($delivery_option))
 			return 0;
