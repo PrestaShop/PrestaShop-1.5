@@ -752,7 +752,7 @@ class CartRuleCore extends ObjectModel
 		if (!$filter)
 			$filter = CartRule::FILTER_ACTION_ALL;
 		
-		$all_products = $context->cart->getProducts();
+		$all_products = $context->cart->getProducts(false, false, null, false);
 		$package_products = (is_null($package) ? $all_products : $package['products']);
 
 		$reduction_value = 0;
@@ -765,199 +765,384 @@ class CartRuleCore extends ObjectModel
 			return Cache::retrieve($cache_id);
 
 		// Free shipping on selected carriers
-		if ($this->free_shipping && in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_SHIPPING)))
-		{
-			if (!$this->carrier_restriction)
-				$reduction_value += $context->cart->getOrderTotal($use_tax, Cart::ONLY_SHIPPING, is_null($package) ? null : $package['products'], is_null($package) ? null : $package['id_carrier']);
-			else
+		if(version_compare(_PS_VERSION, '1.5.4.0', '>=')){
+			if ($this->free_shipping && in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_SHIPPING)))
 			{
-				$data = Db::getInstance()->executeS('
-					SELECT crc.id_cart_rule, c.id_carrier
-					FROM '._DB_PREFIX_.'cart_rule_carrier crc
-					INNER JOIN '._DB_PREFIX_.'carrier c ON (c.id_reference = crc.id_carrier AND c.deleted = 0)					
-					WHERE crc.id_cart_rule = '.(int)$this->id.'
-					AND c.id_carrier = '.(int)$context->cart->id_carrier);
-
-				if ($data)
-					foreach ($data as $cart_rule)
-						$reduction_value += $context->cart->getCarrierCost((int)$cart_rule['id_carrier'], $use_tax, $context->country);
-			}
-		}
-
-		if (in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_REDUCTION)))
-		{
-			// Discount (%) on the whole order
-			if ($this->reduction_percent && $this->reduction_product == 0)
-			{
-				// Do not give a reduction on free products!
-				$order_total = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package_products);
-				foreach ($context->cart->getCartRules(CartRule::FILTER_ACTION_GIFT) as $cart_rule)
-					$order_total -= Tools::ps_round($cart_rule['obj']->getContextualValue($use_tax, $context, CartRule::FILTER_ACTION_GIFT, $package), 2);
-
-				$reduction_value += $order_total * $this->reduction_percent / 100;
-			}
-
-			// Discount (%) on a specific product
-			if ($this->reduction_percent && $this->reduction_product > 0)
-			{
-				foreach ($package_products as $product)
-					if ($product['id_product'] == $this->reduction_product)
-						$reduction_value += ($use_tax ? $product['total_wt'] : $product['total']) * $this->reduction_percent / 100;
-			}
-
-			// Discount (%) on the cheapest product
-			if ($this->reduction_percent && $this->reduction_product == -1)
-			{
-				$minPrice = false;
-				$cheapest_product = null;
-				foreach ($all_products as $product)
-				{
-					$price = ($use_tax ? $product['price_wt'] : $product['price']);
-					if ($price > 0 && ($minPrice === false || $minPrice > $price))
-					{
-						$minPrice = $price;
-						$cheapest_product = $product['id_product'].'-'.$product['id_product_attribute'];
-					}
-				}
-				
-				// Check if the cheapest product is in the package
-				$in_package = false;
-				foreach ($package_products as $product)
-					if ($product['id_product'].'-'.$product['id_product_attribute'] == $cheapest_product || $product['id_product'].'-0' == $cheapest_product)
-						$in_package = true;
-				if ($in_package)
-					$reduction_value += $minPrice * $this->reduction_percent / 100;
-			}
-
-			// Discount (%) on the selection of products
-			if ($this->reduction_percent && $this->reduction_product == -2)
-			{
-				$selected_products_reduction = 0;
-				$selected_products = $this->checkProductRestrictions($context, true);
-				if (is_array($selected_products))
-					foreach ($package_products as $product)
-						if (in_array($product['id_product'].'-'.$product['id_product_attribute'], $selected_products)
-							|| in_array($product['id_product'].'-0', $selected_products))
-						{
-							$price = ($use_tax ? $product['price_wt'] : $product['price']);
-							$selected_products_reduction += $price * $product['cart_quantity'];
-						}
-				$reduction_value += $selected_products_reduction * $this->reduction_percent / 100;
-			}
-
-			// Discount (¤)
-			if ($this->reduction_amount)
-			{
-				$prorata = 1;
-				if (!is_null($package) && count($all_products))
-				{
-					$total_products = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS);
-					if ($total_products)
-						$prorata = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package['products']) / $total_products;
-				}
-
-				$reduction_amount = $this->reduction_amount;
-				// If we need to convert the voucher value to the cart currency
-				if ($this->reduction_currency != $context->currency->id)
-				{
-					$voucherCurrency = new Currency($this->reduction_currency);
-
-					// First we convert the voucher value to the default currency
-					if ($reduction_amount == 0 || $voucherCurrency->conversion_rate == 0)
-						$reduction_amount = 0;
-					else
-						$reduction_amount /= $voucherCurrency->conversion_rate;
-
-					// Then we convert the voucher value in the default currency into the cart currency
-					$reduction_amount *= $context->currency->conversion_rate;
-					$reduction_amount = Tools::ps_round($reduction_amount);
-				}
-
-				// If it has the same tax application that you need, then it's the right value, whatever the product!
-				if ($this->reduction_tax == $use_tax)
-				{
-					// The reduction cannot exceed the products total, except when we do not want it to be limited (for the partial use calculation)
-					if ($filter != CartRule::FILTER_ACTION_ALL_NOCAP)
-					{
-						$cart_amount = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS);
-						$reduction_amount = min($reduction_amount, $cart_amount);
-					}
-					$reduction_value += $prorata * $reduction_amount;
-				}
+				if (!$this->carrier_restriction)
+					$reduction_value += $context->cart->getOrderTotal($use_tax, Cart::ONLY_SHIPPING, is_null($package) ? null : $package['products'], is_null($package) ? null : $package['id_carrier']);
 				else
 				{
-					if ($this->reduction_product > 0)
-					{
-						foreach ($context->cart->getProducts() as $product)
-							if ($product['id_product'] == $this->reduction_product)
-							{
-								$product_price_ti = $product['price_wt'];
-								$product_price_te = $product['price'];
-								$product_vat_amount = $product_price_ti - $product_price_te;
+					$data = Db::getInstance()->executeS('
+						SELECT crc.id_cart_rule, c.id_carrier
+						FROM '._DB_PREFIX_.'cart_rule_carrier crc
+						INNER JOIN '._DB_PREFIX_.'carrier c ON (c.id_reference = crc.id_carrier AND c.deleted = 0)					
+						WHERE crc.id_cart_rule = '.(int)$this->id.'
+						AND c.id_carrier = '.(int)$context->cart->id_carrier);
 
-								if ($product_vat_amount == 0 || $product_price_te == 0)
-									$product_vat_rate = 0;
-								else
-									$product_vat_rate = $product_vat_amount / $product_price_te;
-
-								if ($this->reduction_tax && !$use_tax)
-									$reduction_value += $prorata * $reduction_amount / (1 + $product_vat_rate);
-								elseif (!$this->reduction_tax && $use_tax)
-									$reduction_value += $prorata * $reduction_amount * (1 + $product_vat_rate);
-							}
-					}
-					// Discount (¤) on the whole order
-					elseif ($this->reduction_product == 0)
-					{
-						$cart_amount_ti = $context->cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
-						$cart_amount_te = $context->cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
-						
-						// The reduction cannot exceed the products total, except when we do not want it to be limited (for the partial use calculation)
-						if ($filter != CartRule::FILTER_ACTION_ALL_NOCAP)
-							$reduction_amount = min($reduction_amount, $this->reduction_tax ? $cart_amount_ti : $cart_amount_te);
-
-						$cart_vat_amount = $cart_amount_ti - $cart_amount_te;
-
-						if ($cart_vat_amount == 0 || $cart_amount_te == 0)
-							$cart_average_vat_rate = 0;
-						else
-							$cart_average_vat_rate = Tools::ps_round($cart_vat_amount / $cart_amount_te, 3);
-
-						if ($this->reduction_tax && !$use_tax)
-							$reduction_value += $prorata * $reduction_amount / (1 + $cart_average_vat_rate);
-						elseif (!$this->reduction_tax && $use_tax)
-							$reduction_value += $prorata * $reduction_amount * (1 + $cart_average_vat_rate);
-					}
-					/*
-					 * Reduction on the cheapest or on the selection is not really meaningful and has been disabled in the backend
-					 * Please keep this code, so it won't be considered as a bug
-					 * elseif ($this->reduction_product == -1)
-					 * elseif ($this->reduction_product == -2)
-					*/
+					if ($data)
+						foreach ($data as $cart_rule)
+							$reduction_value += $context->cart->getCarrierCost((int)$cart_rule['id_carrier'], $use_tax, $context->country);
 				}
 			}
-		}
 
-		// Free gift
-		if ((int)$this->gift_product && in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_GIFT)))
-		{
-			$id_address = (is_null($package) ? 0 : $package['id_address']);
-			foreach ($package_products as $product)
-				if ($product['id_product'] == $this->gift_product && ($product['id_product_attribute'] == $this->gift_product_attribute || !(int)$this->gift_product_attribute))
+			if (in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_REDUCTION)))
+			{
+				// Discount (%) on the whole order
+				if ($this->reduction_percent && $this->reduction_product == 0)
 				{
-					// The free gift coupon must be applied to one product only (needed for multi-shipping which manage multiple product lists)
-					if (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product])
-						|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == $id_address
-						|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0
-						|| $id_address == 0
-						|| !$use_cache)
+					// Do not give a reduction on free products!
+					$order_total = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package_products);
+					foreach ($context->cart->getCartRules(CartRule::FILTER_ACTION_GIFT) as $cart_rule)
+						$order_total -= $cart_rule['obj']->getContextualValue($use_tax, $context, CartRule::FILTER_ACTION_GIFT, $package);
+
+					$reduction_value += $order_total * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on a specific product
+				if ($this->reduction_percent && $this->reduction_product > 0)
+				{
+					foreach ($package_products as $product)
+						if ($product['id_product'] == $this->reduction_product)
+							$reduction_value += ($use_tax ? $product['total_wt'] : $product['total']) * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on the cheapest product
+				if ($this->reduction_percent && $this->reduction_product == -1)
+				{
+					$minPrice = false;
+					$cheapest_product = null;
+					foreach ($all_products as $product)
 					{
-						$reduction_value += ($use_tax ? $product['price_wt'] : $product['price']);
-						if ($use_cache && (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product]) || CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0))
-							CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] = $id_address;
-						break;
+						$price = ($use_tax ? $product['price_wt'] : $product['price']);
+						if ($price > 0 && ($minPrice === false || $minPrice > $price))
+						{
+							$minPrice = $price;
+							$cheapest_product = $product['id_product'].'-'.$product['id_product_attribute'];
+						}
+					}
+					
+					// Check if the cheapest product is in the package
+					$in_package = false;
+					foreach ($package_products as $product)
+						if ($product['id_product'].'-'.$product['id_product_attribute'] == $cheapest_product || $product['id_product'].'-0' == $cheapest_product)
+							$in_package = true;
+					if ($in_package)
+						$reduction_value += $minPrice * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on the selection of products
+				if ($this->reduction_percent && $this->reduction_product == -2)
+				{
+					$selected_products_reduction = 0;
+					$selected_products = $this->checkProductRestrictions($context, true);
+					if (is_array($selected_products))
+						foreach ($package_products as $product)
+							if (in_array($product['id_product'].'-'.$product['id_product_attribute'], $selected_products)
+								|| in_array($product['id_product'].'-0', $selected_products))
+							{
+								$price = ($use_tax ? $product['price_wt'] : $product['price']);
+								$selected_products_reduction += $price * $product['cart_quantity'];
+							}
+					$reduction_value += $selected_products_reduction * $this->reduction_percent / 100;
+				}
+
+				// Discount (¤)
+				if ($this->reduction_amount)
+				{
+					$prorata = 1;
+					if (!is_null($package) && count($all_products))
+					{
+						$total_products = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS);
+						if ($total_products)
+							$prorata = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package['products']) / $total_products;
+					}
+
+					$reduction_amount = $this->reduction_amount;
+					// If we need to convert the voucher value to the cart currency
+					if ($this->reduction_currency != $context->currency->id)
+					{
+						$voucherCurrency = new Currency($this->reduction_currency);
+
+						// First we convert the voucher value to the default currency
+						if ($reduction_amount == 0 || $voucherCurrency->conversion_rate == 0)
+							$reduction_amount = 0;
+						else
+							$reduction_amount /= $voucherCurrency->conversion_rate;
+
+						// Then we convert the voucher value in the default currency into the cart currency
+						$reduction_amount *= $context->currency->conversion_rate;
+						$reduction_amount = $reduction_amount;
+					}
+
+					// If it has the same tax application that you need, then it's the right value, whatever the product!
+					if ($this->reduction_tax == $use_tax)
+					{
+						// The reduction cannot exceed the products total, except when we do not want it to be limited (for the partial use calculation)
+						if ($filter != CartRule::FILTER_ACTION_ALL_NOCAP)
+						{
+							$cart_amount = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS);
+							$reduction_amount = min($reduction_amount, $cart_amount);
+						}
+						$reduction_value += $prorata * $reduction_amount;
+					}
+					else
+					{
+						if ($this->reduction_product > 0)
+						{
+							foreach ($context->cart->getProducts() as $product)
+								if ($product['id_product'] == $this->reduction_product)
+								{
+									$product_price_ti = $product['price_wt'];
+									$product_price_te = $product['price'];
+									$product_vat_amount = $product_price_ti - $product_price_te;
+
+									if ($product_vat_amount == 0 || $product_price_te == 0)
+										$product_vat_rate = 0;
+									else
+										$product_vat_rate = $product_vat_amount / $product_price_te;
+
+									if ($this->reduction_tax && !$use_tax)
+										$reduction_value += $prorata * $reduction_amount / (1 + $product_vat_rate);
+									elseif (!$this->reduction_tax && $use_tax)
+										$reduction_value += $prorata * $reduction_amount * (1 + $product_vat_rate);
+								}
+						}
+						// Discount (¤) on the whole order
+						elseif ($this->reduction_product == 0)
+						{
+							$cart_amount_ti = $context->cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+							$cart_amount_te = $context->cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
+							
+							// The reduction cannot exceed the products total, except when we do not want it to be limited (for the partial use calculation)
+							if ($filter != CartRule::FILTER_ACTION_ALL_NOCAP)
+								$reduction_amount = min($reduction_amount, $this->reduction_tax ? $cart_amount_ti : $cart_amount_te);
+
+							$cart_vat_amount = $cart_amount_ti - $cart_amount_te;
+
+							if ($cart_vat_amount == 0 || $cart_amount_te == 0)
+								$cart_average_vat_rate = 0;
+							else
+								$cart_average_vat_rate = $cart_vat_amount / $cart_amount_te;
+
+							if ($this->reduction_tax && !$use_tax)
+								$reduction_value += $prorata * $reduction_amount / (1 + $cart_average_vat_rate);
+							elseif (!$this->reduction_tax && $use_tax)
+								$reduction_value += $prorata * $reduction_amount * (1 + $cart_average_vat_rate);
+						}
+						/*
+						 * Reduction on the cheapest or on the selection is not really meaningful and has been disabled in the backend
+						 * Please keep this code, so it won't be considered as a bug
+						 * elseif ($this->reduction_product == -1)
+						 * elseif ($this->reduction_product == -2)
+						*/
 					}
 				}
+			}
+
+			// Free gift
+			if ((int)$this->gift_product && in_array($filter, array(CartRule::FILTER_ACTION_ALL, CartRule::FILTER_ACTION_ALL_NOCAP, CartRule::FILTER_ACTION_GIFT)))
+			{
+				$id_address = (is_null($package) ? 0 : $package['id_address']);
+				foreach ($package_products as $product)
+					if ($product['id_product'] == $this->gift_product && ($product['id_product_attribute'] == $this->gift_product_attribute || !(int)$this->gift_product_attribute))
+					{
+						// The free gift coupon must be applied to one product only (needed for multi-shipping which manage multiple product lists)
+						if (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product])
+							|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == $id_address
+							|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0
+							|| $id_address == 0
+							|| !$use_cache)
+						{
+							$reduction_value += ($use_tax ? $product['price_wt'] : $product['price']);
+							if ($use_cache && (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product]) || CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0))
+								CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] = $id_address;
+							break;
+						}
+					}
+			}
+		} else {
+			// Free shipping on selected carriers
+			if ($this->free_shipping && ($filter == CartRule::FILTER_ACTION_ALL || $filter == CartRule::FILTER_ACTION_SHIPPING))
+			{
+				if (!$this->carrier_restriction)
+					$reduction_value += $context->cart->getOrderTotal($use_tax, Cart::ONLY_SHIPPING, is_null($package) ? null : $package['products'], is_null($package) ? null : $package['id_carrier']);
+				else
+				{
+					$data = Db::getInstance()->executeS('
+						SELECT crc.id_cart_rule, crc.id_carrier
+						FROM '._DB_PREFIX_.'cart_rule_carrier crc
+						WHERE crc.id_cart_rule = '.(int)$this->id.'
+						AND crc.id_carrier = '.(int)$context->cart->id_carrier);
+
+					if ($data)
+						foreach ($data as $cart_rule)
+							$reduction_value += $context->cart->getCarrierCost((int)$cart_rule['id_carrier'], $use_tax, $context->country);
+				}
+			}
+
+			if ($filter == CartRule::FILTER_ACTION_ALL || $filter == CartRule::FILTER_ACTION_REDUCTION)
+			{
+				// Discount (%) on the whole order
+				if ($this->reduction_percent && $this->reduction_product == 0)
+				{
+					// Do not give a reduction on free products!
+					$order_total = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package_products);
+					foreach ($context->cart->getCartRules(CartRule::FILTER_ACTION_GIFT) as $cart_rule)
+						$order_total -= Tools::ps_round($cart_rule['obj']->getContextualValue($use_tax, $context, CartRule::FILTER_ACTION_GIFT, $package), 2);
+
+					$reduction_value += $order_total * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on a specific product
+				if ($this->reduction_percent && $this->reduction_product > 0)
+				{
+					foreach ($package_products as $product)
+						if ($product['id_product'] == $this->reduction_product)
+							$reduction_value += ($use_tax ? $product['total_wt'] : $product['total']) * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on the cheapest product
+				if ($this->reduction_percent && $this->reduction_product == -1)
+				{
+					$minPrice = false;
+					$cheapest_product = null;
+					foreach ($all_products as $product)
+					{
+						$price = ($use_tax ? $product['price_wt'] : $product['price']);
+						if ($price > 0 && ($minPrice === false || $minPrice > $price))
+						{
+							$minPrice = $price;
+							$cheapest_product = $product['id_product'].'-'.$product['id_product_attribute'];
+						}
+					}
+					
+					// Check if the cheapest product is in the package
+					$in_package = false;
+					foreach ($package_products as $product)
+						if ($product['id_product'].'-'.$product['id_product_attribute'] == $cheapest_product || $product['id_product'].'-0' == $cheapest_product)
+							$in_package = true;
+					if ($in_package)
+						$reduction_value += $minPrice * $this->reduction_percent / 100;
+				}
+
+				// Discount (%) on the selection of products
+				if ($this->reduction_percent && $this->reduction_product == -2)
+				{
+					$selected_products_reduction = 0;
+					$selected_products = $this->checkProductRestrictions($context, true);
+					if (is_array($selected_products))
+						foreach ($package_products as $product)
+							if (in_array($product['id_product'].'-'.$product['id_product_attribute'], $selected_products)
+								|| in_array($product['id_product'].'-0', $selected_products))
+							{
+								$price = ($use_tax ? $product['price_wt'] : $product['price']);
+								$selected_products_reduction += $price * $product['cart_quantity'];
+							}
+					$reduction_value += $selected_products_reduction * $this->reduction_percent / 100;
+				}
+
+				// Discount (¤)
+				if ($this->reduction_amount)
+				{
+					$prorata = 1;
+					if (!is_null($package) && count($all_products))
+					{
+						$total_products = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS);
+						if ($total_products)
+							$prorata = $context->cart->getOrderTotal($use_tax, Cart::ONLY_PRODUCTS, $package['products']) / $total_products;
+					}
+
+					$reduction_amount = $this->reduction_amount;
+					// If we need to convert the voucher value to the cart currency
+					if ($this->reduction_currency != $context->currency->id)
+					{
+						$voucherCurrency = new Currency($this->reduction_currency);
+
+						// First we convert the voucher value to the default currency
+						if ($reduction_amount == 0 || $voucherCurrency->conversion_rate == 0)
+							$reduction_amount = 0;
+						else
+							$reduction_amount /= $voucherCurrency->conversion_rate;
+
+						// Then we convert the voucher value in the default currency into the cart currency
+						$reduction_amount *= $context->currency->conversion_rate;
+					}
+
+					// If it has the same tax application that you need, then it's the right value, whatever the product!
+					if ($this->reduction_tax == $use_tax)
+						$reduction_value += $prorata * $reduction_amount;
+					else
+					{
+						if ($this->reduction_product > 0)
+						{
+							foreach ($context->cart->getProducts() as $product)
+								if ($product['id_product'] == $this->reduction_product)
+								{
+									$product_price_ti = $product['price_wt'];
+									$product_price_te = $product['price'];
+									$product_vat_amount = $product_price_ti - $product_price_te;
+
+									if ($product_vat_amount == 0 || $product_price_te == 0)
+										$product_vat_rate = 0;
+									else
+										$product_vat_rate = $product_vat_amount / $product_price_te;
+
+									if ($this->reduction_tax && !$use_tax)
+										$reduction_value += $prorata * $reduction_amount / (1 + $product_vat_rate);
+									elseif (!$this->reduction_tax && $use_tax)
+										$reduction_value += $prorata * $reduction_amount * (1 + $product_vat_rate);
+								}
+						}
+						// Discount (¤) on the whole order
+						elseif ($this->reduction_product == 0)
+						{
+							// TODO : this should not use the prorata
+							$cart_amount_ti = $context->cart->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+							$cart_amount_te = $context->cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
+
+							$cart_vat_amount = $cart_amount_ti - $cart_amount_te;
+
+							if ($cart_vat_amount == 0 || $cart_amount_te == 0)
+								$cart_average_vat_rate = 0;
+							else
+								$cart_average_vat_rate = $cart_vat_amount / $cart_amount_te;
+
+							if ($this->reduction_tax && !$use_tax)
+								$reduction_value += $prorata * $reduction_amount / (1 + $cart_average_vat_rate);
+							elseif (!$this->reduction_tax && $use_tax)
+								$reduction_value += $prorata * $reduction_amount * (1 + $cart_average_vat_rate);
+						}
+						/*
+						 * Reduction on the cheapest or on the selection is not really meaningful and has been disabled in the backend
+						 * Please keep this code, so it won't be considered as a bug
+						 * elseif ($this->reduction_product == -1)
+						 * elseif ($this->reduction_product == -2)
+						*/
+					}
+				}
+			}
+
+			// Free gift
+			if ((int)$this->gift_product && ($filter == CartRule::FILTER_ACTION_ALL || $filter == CartRule::FILTER_ACTION_GIFT))
+			{
+				$id_address = (is_null($package) ? 0 : $package['id_address']);
+				foreach ($package_products as $product)
+					if ($product['id_product'] == $this->gift_product && ($product['id_product_attribute'] == $this->gift_product_attribute || !(int)$this->gift_product_attribute))
+					{
+						// The free gift coupon must be applied to one product only (needed for multi-shipping which manage multiple product lists)
+						if (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product])
+							|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == $id_address
+							|| CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0
+							|| $id_address == 0
+							|| !$use_cache)
+						{
+							$reduction_value += ($use_tax ? $product['price_wt'] : $product['price']);
+							if ($use_cache && (!isset(CartRule::$only_one_gift[$this->id.'-'.$this->gift_product]) || CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] == 0))
+								CartRule::$only_one_gift[$this->id.'-'.$this->gift_product] = $id_address;
+							break;
+						}
+					}
+			}
 		}
 
 		Cache::store($cache_id, $reduction_value);

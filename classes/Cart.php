@@ -406,7 +406,7 @@ class CartCore extends ObjectModel
 	 *
 	 * @result array Products
 	 */
-	public function getProducts($refresh = false, $id_product = false, $id_country = null)
+	public function getProducts($refresh = false, $id_product = false, $id_country = null, $round = true)
 	{
 		if (!$this->id)
 			return array();
@@ -542,96 +542,189 @@ class CartCore extends ObjectModel
 
 			if ($cart_shop_context->shop->id != $row['id_shop'])
 				$cart_shop_context->shop = new Shop((int)$row['id_shop']);
+			
+			if($round){
+				if ($this->_taxCalculationMethod == PS_TAX_EXC)
+				{
+					$row['price'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						false,
+						isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
+						2,
+						null,
+						false,
+						true,
+						(int)$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$specific_price_output,
+						true,
+						true,
+						$cart_shop_context
+					); // Here taxes are computed only once the quantity has been applied to the product price
 
-			if ($this->_taxCalculationMethod == PS_TAX_EXC)
-			{
-				$row['price'] = Product::getPriceStatic(
-					(int)$row['id_product'],
-					false,
-					isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
-					2,
-					null,
-					false,
-					true,
-					(int)$row['cart_quantity'],
-					false,
-					((int)$this->id_customer ? (int)$this->id_customer : null),
-					(int)$this->id,
-					((int)$address_id ? (int)$address_id : null),
-					$specific_price_output,
-					true,
-					true,
-					$cart_shop_context
-				); // Here taxes are computed only once the quantity has been applied to the product price
+					$row['price_wt'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						true,
+						isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
+						2,
+						null,
+						false,
+						true,
+						(int)$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$null,
+						true,
+						true,
+						$cart_shop_context
+					);
 
-				$row['price_wt'] = Product::getPriceStatic(
-					(int)$row['id_product'],
-					true,
-					isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
-					2,
-					null,
-					false,
-					true,
-					(int)$row['cart_quantity'],
-					false,
-					((int)$this->id_customer ? (int)$this->id_customer : null),
-					(int)$this->id,
-					((int)$address_id ? (int)$address_id : null),
-					$null,
-					true,
-					true,
-					$cart_shop_context
-				);
+					$tax_rate = Tax::getProductTaxRate((int)$row['id_product'], (int)$address_id);
 
-				$tax_rate = Tax::getProductTaxRate((int)$row['id_product'], (int)$address_id);
+					$row['total_wt'] = Tools::ps_round($row['price'] * (float)$row['cart_quantity'] * (1 + (float)$tax_rate / 100), 2);
+					$row['total'] = $row['price'] * (int)$row['cart_quantity'];
+				}
+				else
+				{
+					$row['price'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						false,
+						(int)$row['id_product_attribute'],
+						2,
+						null,
+						false,
+						true,
+						$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$specific_price_output,
+						true,
+						true,
+						$cart_shop_context
+					);
 
-				$row['total_wt'] = Tools::ps_round($row['price'] * (float)$row['cart_quantity'] * (1 + (float)$tax_rate / 100), 2);
-				$row['total'] = $row['price'] * (int)$row['cart_quantity'];
-			}
-			else
-			{
-				$row['price'] = Product::getPriceStatic(
-					(int)$row['id_product'],
-					false,
-					(int)$row['id_product_attribute'],
-					2,
-					null,
-					false,
-					true,
-					$row['cart_quantity'],
-					false,
-					((int)$this->id_customer ? (int)$this->id_customer : null),
-					(int)$this->id,
-					((int)$address_id ? (int)$address_id : null),
-					$specific_price_output,
-					true,
-					true,
-					$cart_shop_context
-				);
+					$row['price_wt'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						true,
+						(int)$row['id_product_attribute'],
+						2,
+						null,
+						false,
+						true,
+						$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$null,
+						true,
+						true,
+						$cart_shop_context
+					);
+					
+					// In case when you use QuantityDiscount, getPriceStatic() can be return more of 2 decimals
+					$row['price_wt'] = Tools::ps_round($row['price_wt'], 2);
+					$row['total_wt'] = $row['price_wt'] * (int)$row['cart_quantity'];
+					$row['total'] = Tools::ps_round($row['price'] * (int)$row['cart_quantity'], 2);
+				}
+			} else {
+				if ($this->_taxCalculationMethod == PS_TAX_EXC)
+				{
+					$row['price'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						false,
+						isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
+						10,
+						null,
+						false,
+						true,
+						(int)$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$specific_price_output,
+						true,
+						true,
+						$cart_shop_context
+					); // Here taxes are computed only once the quantity has been applied to the product price
 
-				$row['price_wt'] = Product::getPriceStatic(
-					(int)$row['id_product'],
-					true,
-					(int)$row['id_product_attribute'],
-					2,
-					null,
-					false,
-					true,
-					$row['cart_quantity'],
-					false,
-					((int)$this->id_customer ? (int)$this->id_customer : null),
-					(int)$this->id,
-					((int)$address_id ? (int)$address_id : null),
-					$null,
-					true,
-					true,
-					$cart_shop_context
-				);
-				
-				// In case when you use QuantityDiscount, getPriceStatic() can be return more of 2 decimals
-				$row['price_wt'] = Tools::ps_round($row['price_wt'], 2);
-				$row['total_wt'] = $row['price_wt'] * (int)$row['cart_quantity'];
-				$row['total'] = Tools::ps_round($row['price'] * (int)$row['cart_quantity'], 2);
+					$row['price_wt'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						true,
+						isset($row['id_product_attribute']) ? (int)$row['id_product_attribute'] : null,
+						10,
+						null,
+						false,
+						true,
+						(int)$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$null,
+						true,
+						true,
+						$cart_shop_context
+					);
+
+					$tax_rate = Tax::getProductTaxRate((int)$row['id_product'], (int)$address_id);
+
+					$row['total_wt'] = $row['price'] * (float)$row['cart_quantity'] * (1 + (float)$tax_rate / 100);
+					$row['total'] = $row['price'] * (int)$row['cart_quantity'];
+				}
+				else
+				{
+					$row['price'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						false,
+						(int)$row['id_product_attribute'],
+						10,
+						null,
+						false,
+						true,
+						$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$specific_price_output,
+						true,
+						true,
+						$cart_shop_context
+					);
+
+					$row['price_wt'] = Product::getPriceStatic(
+						(int)$row['id_product'],
+						true,
+						(int)$row['id_product_attribute'],
+						10,
+						null,
+						false,
+						true,
+						$row['cart_quantity'],
+						false,
+						((int)$this->id_customer ? (int)$this->id_customer : null),
+						(int)$this->id,
+						((int)$address_id ? (int)$address_id : null),
+						$null,
+						true,
+						true,
+						$cart_shop_context
+					);
+					
+					// In case when you use QuantityDiscount, getPriceStatic() can be return more of 2 decimals
+					$row['price_wt'] = $row['price_wt'];
+					$row['total_wt'] = $row['price_wt'] * (int)$row['cart_quantity'];
+					$row['total'] = $row['price'] * (int)$row['cart_quantity'];
+				}
 			}
 
 			if (!isset($row['pai_id_image']) || $row['pai_id_image'] == 0)
@@ -1402,7 +1495,7 @@ class CartCore extends ObjectModel
 					(int)$product['id_product'],
 					false,
 					(int)$product['id_product_attribute'],
-					2,
+					10,
 					null,
 					false,
 					true,
@@ -1427,7 +1520,7 @@ class CartCore extends ObjectModel
 
 					$total_price = ($total_price - $total_ecotax) * (1 + $product_tax_rate / 100);
 					$total_ecotax = $total_ecotax * (1 + $product_eco_tax_rate / 100);
-					$total_price = Tools::ps_round($total_price + $total_ecotax, 2);
+					$total_price = $total_price + $total_ecotax;
 				}
 			}
 			else
@@ -1437,7 +1530,7 @@ class CartCore extends ObjectModel
 						(int)$product['id_product'],
 						true,
 						(int)$product['id_product_attribute'],
-						2,
+						10,
 						null,
 						false,
 						true,
@@ -1456,7 +1549,7 @@ class CartCore extends ObjectModel
 						(int)$product['id_product'],
 						false,
 						(int)$product['id_product_attribute'],
-						2,
+						10,
 						null,
 						false,
 						true,
@@ -1471,7 +1564,7 @@ class CartCore extends ObjectModel
 						$virtual_context
 					);
 
-				$total_price = Tools::ps_round($price * (int)$product['cart_quantity'], 2);
+				$total_price = $price * (int)$product['cart_quantity'];
 			}
 			$order_total += $total_price;
 		}
@@ -1484,7 +1577,7 @@ class CartCore extends ObjectModel
 		// Wrapping Fees
 		$wrapping_fees = 0;
 		if ($this->gift)
-			$wrapping_fees = Tools::convertPrice(Tools::ps_round($this->getGiftWrappingPrice($with_taxes), 2), Currency::getCurrencyInstance((int)$this->id_currency));
+			$wrapping_fees = Tools::convertPrice($this->getGiftWrappingPrice($with_taxes), Currency::getCurrencyInstance((int)$this->id_currency));
 		if ($type == Cart::ONLY_WRAPPING)
 			return $wrapping_fees;
 
@@ -1519,7 +1612,7 @@ class CartCore extends ObjectModel
 			{
 				// If the cart rule offers free shipping, add the shipping cost
 				if (($with_shipping || $type == Cart::ONLY_DISCOUNTS) && $cart_rule['obj']->free_shipping)
-					$order_total_discount += Tools::ps_round($cart_rule['obj']->getContextualValue($with_taxes, $virtual_context, CartRule::FILTER_ACTION_SHIPPING, ($param_product ? $package : null), $use_cache), 2);
+					$order_total_discount += $cart_rule['obj']->getContextualValue($with_taxes, $virtual_context, CartRule::FILTER_ACTION_SHIPPING, ($param_product ? $package : null), $use_cache);
 
 				// If the cart rule is a free gift, then add the free gift value only if the gift is in this package
 				if ((int)$cart_rule['obj']->gift_product)
@@ -1538,22 +1631,21 @@ class CartCore extends ObjectModel
 
 				// If the cart rule offers a reduction, the amount is prorated (with the products in the package)
 				if ($cart_rule['obj']->reduction_percent > 0 || $cart_rule['obj']->reduction_amount > 0)
-					$order_total_discount += Tools::ps_round($cart_rule['obj']->getContextualValue($with_taxes, $virtual_context, CartRule::FILTER_ACTION_REDUCTION, $package, $use_cache), 2);
+					$order_total_discount += $cart_rule['obj']->getContextualValue($with_taxes, $virtual_context, CartRule::FILTER_ACTION_REDUCTION, $package, $use_cache);
 			}
-			$order_total_discount = min(Tools::ps_round($order_total_discount, 2), $wrapping_fees + $order_total_products + $shipping_fees);
+			$order_total_discount = min($order_total_discount, $wrapping_fees + $order_total_products + $shipping_fees);
 			$order_total -= $order_total_discount;
 		}
 
 		if ($type == Cart::BOTH)
 			$order_total += $shipping_fees + $wrapping_fees;
-
 		if ($order_total < 0 && $type != Cart::ONLY_DISCOUNTS)
 			return 0;
 
 		if ($type == Cart::ONLY_DISCOUNTS)
 			return $order_total_discount;
 
-		return Tools::ps_round((float)$order_total, 2);
+		return (float)$order_total;
 	}
 
 	/**
@@ -1615,10 +1707,10 @@ class CartCore extends ObjectModel
 	public function getPackageList($flush = false)
 	{
 		static $cache = array();
-		if (isset($cache[(int)$this->id.'_'.(int)$this->id_address_delivery]) && $cache[(int)$this->id.'_'.(int)$this->id_address_delivery] !== false && !$flush)
-			return $cache[(int)$this->id.'_'.(int)$this->id_address_delivery];
+		if (isset($cache[(int)$this->id]) && $cache[(int)$this->id] !== false && !$flush)
+			return $cache[(int)$this->id];
 
-		$product_list = $this->getProducts();
+		$product_list = $this->getProducts(false, false, null, false);
 		// Step 1 : Get product informations (warehouse_list and carrier_list), count warehouse
 		// Determine the best warehouse to determine the packages
 		// For that we count the number of time we can use a warehouse for a specific delivery address
@@ -2777,7 +2869,7 @@ class CartCore extends ObjectModel
 		if ($use_tax && isset($carrier_tax))
 			$shipping_cost *= 1 + ($carrier_tax / 100);
 
-		$shipping_cost = (float)Tools::ps_round((float)$shipping_cost, 2);
+		$shipping_cost = (float)$shipping_cost;
 		Cache::store($cache_id, $shipping_cost);
 
 		return $shipping_cost;

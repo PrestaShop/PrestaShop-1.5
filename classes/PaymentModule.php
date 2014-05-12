@@ -135,7 +135,8 @@ abstract class PaymentModuleCore extends Module
 		$this->context->customer = new Customer($this->context->cart->id_customer);
 		$this->context->language = new Language($this->context->cart->id_lang);
 		$this->context->shop = ($shop ? $shop : new Shop($this->context->cart->id_shop));
-		ShopUrl::resetMainDomainCache();
+		if (version_compare(_PS_VERSION_, '1.5.5') >= 0)
+			ShopUrl::resetMainDomainCache();
 
 		$id_currency = $currency_special ? (int)$currency_special : (int)$this->context->cart->id_currency;
 		$this->context->currency = new Currency($id_currency, null, $this->context->shop->id);
@@ -252,8 +253,8 @@ abstract class PaymentModuleCore extends Module
 					$order->total_wrapping_tax_incl = (float)abs($this->context->cart->getOrderTotal(true, Cart::ONLY_WRAPPING, $order->product_list, $id_carrier));
 					$order->total_wrapping = $order->total_wrapping_tax_incl;
 
-					$order->total_paid_tax_excl = (float)Tools::ps_round((float)$this->context->cart->getOrderTotal(false, Cart::BOTH, $order->product_list, $id_carrier), 2);
-					$order->total_paid_tax_incl = (float)Tools::ps_round((float)$this->context->cart->getOrderTotal(true, Cart::BOTH, $order->product_list, $id_carrier), 2);
+					$order->total_paid_tax_excl = (float)$this->context->cart->getOrderTotal(false, Cart::BOTH, $order->product_list, $id_carrier);
+					$order->total_paid_tax_incl = (float)$this->context->cart->getOrderTotal(true, Cart::BOTH, $order->product_list, $id_carrier);
 					$order->total_paid = $order->total_paid_tax_incl;
 
 					$order->invoice_date = '0000-00-00 00:00:00';
@@ -351,7 +352,7 @@ abstract class PaymentModuleCore extends Module
 
 					foreach ($order->product_list as $key => $product)
 					{
-						$price = Product::getPriceStatic((int)$product['id_product'], false, ($product['id_product_attribute'] ? (int)$product['id_product_attribute'] : null), 6, null, false, true, $product['cart_quantity'], false, (int)$order->id_customer, (int)$order->id_cart, (int)$order->{Configuration::get('PS_TAX_ADDRESS_TYPE')});
+						$price = Product::getPriceStatic((int)$product['id_product'], false, ($product['id_product_attribute'] ? (int)$product['id_product_attribute'] : null), 10, null, false, true, $product['cart_quantity'], false, (int)$order->id_customer, (int)$order->id_cart, (int)$order->{Configuration::get('PS_TAX_ADDRESS_TYPE')});
 						$price_wt = Product::getPriceStatic((int)$product['id_product'], true, ($product['id_product_attribute'] ? (int)$product['id_product_attribute'] : null), 2, null, false, true, $product['cart_quantity'], false, (int)$order->id_customer, (int)$order->id_cart, (int)$order->{Configuration::get('PS_TAX_ADDRESS_TYPE')});
 
 						$customization_quantity = 0;
@@ -369,8 +370,7 @@ abstract class PaymentModuleCore extends Module
 									$customization_text .= sprintf(Tools::displayError('%d image(s)'), count($customization['datas'][Product::CUSTOMIZE_FILE])).'<br />';
 								$customization_text .= '---<br />';
 							}
-
-							$customization_text = Tools::rtrimString($customization_text, '---<br />');
+							$customization_text = rtrim($customization_text, '---<br />');
 
 							$customization_quantity = (int)$product['customization_quantity'];
 							$products_list .=
@@ -436,21 +436,9 @@ abstract class PaymentModuleCore extends Module
 
 							// Set the new voucher value
 							if ($voucher->reduction_tax)
-							{
-								$voucher->reduction_amount = $values['tax_incl'] - ($order->total_products_wt - $total_reduction_value_ti);
-
-								// Add total shipping amout only if reduction amount > total shipping
-								if ($voucher->free_shipping == 1 && $voucher->reduction_amount >= $order->total_shipping_tax_incl)
-									$voucher->reduction_amount -= $order->total_shipping_tax_incl;
-							}
+								$voucher->reduction_amount = $values['tax_incl'] - ($order->total_products_wt - $total_reduction_value_ti) - ($voucher->free_shipping == 1 ? $order->total_shipping_tax_incl : 0);
 							else
-							{
-								$voucher->reduction_amount = $values['tax_excl'] - ($order->total_products - $total_reduction_value_tex);
-
-								// Add total shipping amout only if reduction amount > total shipping
-								if ($voucher->free_shipping == 1 && $voucher->reduction_amount >= $order->total_shipping_tax_excl)
-									$voucher->reduction_amount -= $order->total_shipping_tax_excl;
-							}
+								$voucher->reduction_amount = $values['tax_excl'] - ($order->total_products - $total_reduction_value_tex) - ($voucher->free_shipping == 1 ? $order->total_shipping_tax_excl : 0);
 
 							$voucher->id_customer = $order->id_customer;
 							$voucher->quantity = 1;

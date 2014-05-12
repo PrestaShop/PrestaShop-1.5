@@ -1126,6 +1126,23 @@ class OrderCore extends ObjectModel
 			WHERE `id_order_invoice` = '.(int)$order_invoice_id
 		);
 	}
+	
+	/**
+	 * Return order invoice IDs linked to the order
+	 *
+	 */
+	public function getOrderInvoice_id()
+	{
+		$res = Db::getInstance()->getValue('
+		SELECT id_order_invoice
+		FROM `'._DB_PREFIX_.'order_invoice`
+		WHERE id_order = '.(int)$this->id);
+		
+		if (!$res)
+			return false;
+		
+		return $res;
+	}
 
 	/**
 	 * This method allows to generate first invoice of the current order
@@ -1214,6 +1231,59 @@ class OrderCore extends ObjectModel
 			$this->invoice_number = $this->getInvoiceNumber($order_invoice->id);
 			$this->update();
 		}
+	}
+	
+	/**
+	 * This method allows to update invoices of the current order
+	 */
+	public function updateInvoice($id_order_invoice, $use_existing_payment = false)
+	{
+		if(!$id_order_invoice)
+			return false;
+
+		$order_invoice = new OrderInvoice((int)$id_order_invoice);
+		$invoice_address = new Address((int)$this->id_address_invoice);
+		$carrier = new Carrier((int)$this->id_carrier);
+		$tax_calculator = $carrier->getTaxCalculator($invoice_address);
+
+		$order_invoice->total_discount_tax_excl = $this->total_discounts_tax_excl;
+		$order_invoice->total_discount_tax_incl = $this->total_discounts_tax_incl;
+		$order_invoice->total_paid_tax_excl = $this->total_paid_tax_excl;
+		$order_invoice->total_paid_tax_incl = $this->total_paid_tax_incl;
+		$order_invoice->total_products = $this->total_products;
+		$order_invoice->total_products_wt = $this->total_products_wt;
+		$order_invoice->total_shipping_tax_excl = $this->total_shipping_tax_excl;
+		$order_invoice->total_shipping_tax_incl = $this->total_shipping_tax_incl;
+		$order_invoice->shipping_tax_computation_method = $tax_calculator->computation_method;
+		$order_invoice->total_wrapping_tax_excl = $this->total_wrapping_tax_excl;
+		$order_invoice->total_wrapping_tax_incl = $this->total_wrapping_tax_incl;
+
+		// Save Order invoice
+		$order_invoice->update();
+
+		$order_invoice->saveCarrierTaxCalculator($tax_calculator->getTaxesAmount($order_invoice->total_shipping_tax_excl));
+
+		// Update order_carrier
+		$id_order_carrier = Db::getInstance()->getValue('
+			SELECT `id_order_carrier`
+			FROM `'._DB_PREFIX_.'order_carrier`
+			WHERE `id_order` = '.(int)$order_invoice->id_order.'
+			AND `id_order_invoice` = '.(int)$order_invoice->id);
+		
+		if ($id_order_carrier)
+		{
+			$order_carrier = new OrderCarrier($id_order_carrier);
+			$order_carrier->id_order_invoice = (int)$order_invoice->id;
+			$order_carrier->update();
+		}
+
+		// Update order detail
+		Db::getInstance()->execute('
+			UPDATE `'._DB_PREFIX_.'order_detail`
+			SET `id_order_invoice` = '.(int)$order_invoice->id.'
+			WHERE `id_order` = '.(int)$order_invoice->id_order);
+			
+		return true;
 	}
 
 	public function setDeliveryNumber($order_invoice_id, $id_shop)

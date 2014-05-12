@@ -267,7 +267,8 @@ class AdminOrdersControllerCore extends AdminController
 			$order = new Order(Tools::getValue('id_order'));
 			if (!Validate::isLoadedObject($order))
 				throw new PrestaShopException('Can\'t load Order object');
-			ShopUrl::cacheMainDomainForShop((int)$order->id_shop);
+			if (version_compare(_PS_VERSION_, '1.5.5') >= 0)
+				ShopUrl::cacheMainDomainForShop((int)$order->id_shop);
 		}
 
 		/* Update shipping number */
@@ -1072,8 +1073,8 @@ class AdminOrdersControllerCore extends AdminController
 							{
 								if (isset($order_invoice))
 								{
-									$cart_rules[$order_invoice->id]['value_tax_incl'] = Tools::ps_round($order_invoice->total_paid_tax_incl * $discount_value / 100, 2);
-									$cart_rules[$order_invoice->id]['value_tax_excl'] = Tools::ps_round($order_invoice->total_paid_tax_excl * $discount_value / 100, 2);
+									$cart_rules[$order_invoice->id]['value_tax_incl'] = $order_invoice->total_paid_tax_incl * $discount_value / 100;
+									$cart_rules[$order_invoice->id]['value_tax_excl'] = $order_invoice->total_paid_tax_excl * $discount_value / 100;
 
 									// Update OrderInvoice
 									$this->applyDiscountOnInvoice($order_invoice, $cart_rules[$order_invoice->id]['value_tax_incl'], $cart_rules[$order_invoice->id]['value_tax_excl']);
@@ -1083,8 +1084,8 @@ class AdminOrdersControllerCore extends AdminController
 									$order_invoices_collection = $order->getInvoicesCollection();
 									foreach ($order_invoices_collection as $order_invoice)
 									{
-										$cart_rules[$order_invoice->id]['value_tax_incl'] = Tools::ps_round($order_invoice->total_paid_tax_incl * $discount_value / 100, 2);
-										$cart_rules[$order_invoice->id]['value_tax_excl'] = Tools::ps_round($order_invoice->total_paid_tax_excl * $discount_value / 100, 2);
+										$cart_rules[$order_invoice->id]['value_tax_incl'] = $order_invoice->total_paid_tax_incl * $discount_value / 100;
+										$cart_rules[$order_invoice->id]['value_tax_excl'] = $order_invoice->total_paid_tax_excl * $discount_value / 100;
 
 										// Update OrderInvoice
 										$this->applyDiscountOnInvoice($order_invoice, $cart_rules[$order_invoice->id]['value_tax_incl'], $cart_rules[$order_invoice->id]['value_tax_excl']);
@@ -1092,8 +1093,8 @@ class AdminOrdersControllerCore extends AdminController
 								}
 								else
 								{
-									$cart_rules[0]['value_tax_incl'] = Tools::ps_round($order->total_paid_tax_incl * $discount_value / 100, 2);
-									$cart_rules[0]['value_tax_excl'] = Tools::ps_round($order->total_paid_tax_excl * $discount_value / 100, 2);
+									$cart_rules[0]['value_tax_incl'] = $order->total_paid_tax_incl * $discount_value / 100;
+									$cart_rules[0]['value_tax_excl'] = $order->total_paid_tax_excl * $discount_value / 100;
 								}
 							}
 							else
@@ -1107,8 +1108,8 @@ class AdminOrdersControllerCore extends AdminController
 									$this->errors[] = Tools::displayError('The discount value is greater than the order invoice total.');
 								else
 								{
-									$cart_rules[$order_invoice->id]['value_tax_incl'] = Tools::ps_round($discount_value, 2);
-									$cart_rules[$order_invoice->id]['value_tax_excl'] = Tools::ps_round($discount_value / (1 + ($order->getTaxesAverageUsed() / 100)), 2);
+									$cart_rules[$order_invoice->id]['value_tax_incl'] = $discount_value;
+									$cart_rules[$order_invoice->id]['value_tax_excl'] = $discount_value / (1 + ($order->getTaxesAverageUsed() / 100));
 
 									// Update OrderInvoice
 									$this->applyDiscountOnInvoice($order_invoice, $cart_rules[$order_invoice->id]['value_tax_incl'], $cart_rules[$order_invoice->id]['value_tax_excl']);
@@ -1123,8 +1124,8 @@ class AdminOrdersControllerCore extends AdminController
 										$this->errors[] = Tools::displayError('The discount value is greater than the order invoice total.').$order_invoice->getInvoiceNumberFormatted(Context::getContext()->language->id, (int)$order->id_shop).')';
 									else
 									{
-										$cart_rules[$order_invoice->id]['value_tax_incl'] = Tools::ps_round($discount_value, 2);
-										$cart_rules[$order_invoice->id]['value_tax_excl'] = Tools::ps_round($discount_value / (1 + ($order->getTaxesAverageUsed() / 100)), 2);
+										$cart_rules[$order_invoice->id]['value_tax_incl'] = $discount_value;
+										$cart_rules[$order_invoice->id]['value_tax_excl'] = $discount_value / (1 + ($order->getTaxesAverageUsed() / 100));
 
 										// Update OrderInvoice
 										$this->applyDiscountOnInvoice($order_invoice, $cart_rules[$order_invoice->id]['value_tax_incl'], $cart_rules[$order_invoice->id]['value_tax_excl']);
@@ -1225,6 +1226,15 @@ class AdminOrdersControllerCore extends AdminController
 
 						// Update Order
 						$res &= $order->update();
+					}
+					if ($res)
+					{
+						// Add cart_rule to the associated cart
+						foreach ($cart_rules as $id_order_invoice => $cart_rule)
+						{
+							$cart = new Cart($order->id_cart);
+							$res &= $cart->addCartRule($cart_rule['id']);
+						}
 					}
 
 					if ($res)
@@ -1658,8 +1668,8 @@ class AdminOrdersControllerCore extends AdminController
 				$order_invoice->total_paid_tax_incl = Tools::ps_round((float)$cart->getOrderTotal($use_taxes, $total_method), 2);
 				$order_invoice->total_products = (float)$cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
 				$order_invoice->total_products_wt = (float)$cart->getOrderTotal($use_taxes, Cart::ONLY_PRODUCTS);
-				$order_invoice->total_shipping_tax_excl = (float)$cart->getTotalShippingCost(null, false);
-				$order_invoice->total_shipping_tax_incl = (float)$cart->getTotalShippingCost();
+				$order_invoice->total_shipping_tax_excl = (float)$cart->getTotalShippingCost_noround(null, false);
+				$order_invoice->total_shipping_tax_incl = (float)$cart->getTotalShippingCost_noround();
 
 				$order_invoice->total_wrapping_tax_excl = abs($cart->getOrderTotal(false, Cart::ONLY_WRAPPING));
 				$order_invoice->total_wrapping_tax_incl = abs($cart->getOrderTotal($use_taxes, Cart::ONLY_WRAPPING));
@@ -1689,8 +1699,8 @@ class AdminOrdersControllerCore extends AdminController
 			// Update current invoice
 			else
 			{
-				$order_invoice->total_paid_tax_excl += Tools::ps_round((float)($cart->getOrderTotal(false, $total_method)), 2);
-				$order_invoice->total_paid_tax_incl += Tools::ps_round((float)($cart->getOrderTotal($use_taxes, $total_method)), 2);
+				$order_invoice->total_paid_tax_excl += (float)($cart->getOrderTotal(false, $total_method));
+				$order_invoice->total_paid_tax_incl += (float)($cart->getOrderTotal($use_taxes, $total_method));
 				$order_invoice->total_products += (float)$cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
 				$order_invoice->total_products_wt += (float)$cart->getOrderTotal($use_taxes, Cart::ONLY_PRODUCTS);
 				$order_invoice->update();
@@ -1699,7 +1709,7 @@ class AdminOrdersControllerCore extends AdminController
 
 		// Create Order detail information
 		$order_detail = new OrderDetail();
-		$order_detail->createList($order, $cart, $order->getCurrentOrderState(), $cart->getProducts(), (isset($order_invoice) ? $order_invoice->id : 0), $use_taxes, (int)Tools::getValue('add_product_warehouse'));
+		$order_detail->createList($order, $cart, $order->getCurrentOrderState(), $cart->getProducts(false, false, null, false), (isset($order_invoice) ? $order_invoice->id : 0), $use_taxes, (int)Tools::getValue('add_product_warehouse'));
 
 		// update totals amount of order
 		$order->total_products += (float)$cart->getOrderTotal(false, Cart::ONLY_PRODUCTS);
@@ -1874,8 +1884,8 @@ class AdminOrdersControllerCore extends AdminController
 		else
 			$product_quantity = Tools::getValue('product_quantity');
 
-		$product_price_tax_incl = Tools::ps_round(Tools::getValue('product_price_tax_incl'), 2);
-		$product_price_tax_excl = Tools::ps_round(Tools::getValue('product_price_tax_excl'), 2);
+		$product_price_tax_incl =Tools::getValue('product_price_tax_incl');
+		$product_price_tax_excl = Tools::getValue('product_price_tax_excl');
 		$total_products_tax_incl = $product_price_tax_incl * $product_quantity;
 		$total_products_tax_excl = $product_price_tax_excl * $product_quantity;
 
@@ -2278,12 +2288,65 @@ class AdminOrdersControllerCore extends AdminController
 
 	protected function applyDiscountOnInvoice($order_invoice, $value_tax_incl, $value_tax_excl)
 	{
+		if (Tools::isSubmit('id_order') && Tools::getValue('id_order') > 0)
+		{
+			$order = new Order(Tools::getValue('id_order'));
+			if (!Validate::isLoadedObject($order))
+				throw new PrestaShopException('Can\'t load Order object');
+			if (version_compare(_PS_VERSION_, '1.5.5') >= 0)
+				ShopUrl::cacheMainDomainForShop((int)$order->id_shop);
+		}
+		
 		// Update OrderInvoice
 		$order_invoice->total_discount_tax_incl += $value_tax_incl;
 		$order_invoice->total_discount_tax_excl += $value_tax_excl;
 		$order_invoice->total_paid_tax_incl -= $value_tax_incl;
 		$order_invoice->total_paid_tax_excl -= $value_tax_excl;
 		$order_invoice->update();
+		
+		// Update OrderDetail Tax
+		$discount_value = (float)str_replace(',', '.', Tools::getValue('discount_value'));
+		switch (Tools::getValue('discount_type'))
+		{
+			// Percent type
+			case 1:
+				$taxes_infos = Db::getInstance()->executeS('
+				SELECT odt.`id_order_detail`, odt.`id_tax`, t.`rate` AS `name`, od.`total_price_tax_excl` AS total_price_tax_excl, t.`rate`, odt.`total_amount`, od.`ecotax`, od.`ecotax_tax_rate`, od.`product_quantity`
+				FROM `'._DB_PREFIX_.'order_detail_tax` odt
+				LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = odt.`id_tax`)
+				LEFT JOIN `'._DB_PREFIX_.'order_detail` od ON (od.`id_order_detail` = odt.`id_order_detail`)
+				WHERE od.`id_order` = '.(int)$order->id.'
+				AND od.`id_order_invoice` = '.(int)$order_invoice->id.'
+				');
+
+				// sum by taxes
+				$tmp_tax_infos = array();
+				foreach ($taxes_infos as $tax_infos)
+				{
+					$tax_infos['total_amount'] = $tax_infos['total_amount'] * ((100-$discount_value) / 100);
+					Db::getInstance()->execute('UPDATE `'._DB_PREFIX_.'order_detail_tax` SET total_amount = '. (float)$tax_infos['total_amount'] .' WHERE id_order_detail = '.$tax_infos['id_order_detail'].' AND id_tax = '.$tax_infos['id_tax']);
+				}
+			break;
+			// Amount type
+			case 2:
+				$taxes_infos = Db::getInstance()->executeS('
+				SELECT odt.`id_order_detail`, odt.`id_tax`, t.`rate` AS `name`, od.`total_price_tax_excl` AS total_price_tax_excl, t.`rate`, odt.`total_amount`, od.`ecotax`, od.`ecotax_tax_rate`, od.`product_quantity`
+				FROM `'._DB_PREFIX_.'order_detail_tax` odt
+				LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = odt.`id_tax`)
+				LEFT JOIN `'._DB_PREFIX_.'order_detail` od ON (od.`id_order_detail` = odt.`id_order_detail`)
+				WHERE od.`id_order` = '.(int)$order->id.'
+				AND od.`id_order_invoice` = '.(int)$order_invoice->id.'
+				');
+
+				// sum by taxes
+				$tmp_tax_infos = array();
+				foreach ($taxes_infos as $tax_infos)
+				{
+					$tax_infos['total_amount'] = $tax_infos['total_amount'] - ($discount_value * ($tax_infos['rate'] / 100));
+					Db::getInstance()->execute('UPDATE `'._DB_PREFIX_.'order_detail_tax` SET total_amount = '. (float)$tax_infos['total_amount'] .' WHERE id_order_detail = '.$tax_infos['id_order_detail'].' AND id_tax = '.$tax_infos['id_tax']);
+				}				
+			break;
+		}		
 	}
 }
 
