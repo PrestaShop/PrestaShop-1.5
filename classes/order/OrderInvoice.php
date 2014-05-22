@@ -259,7 +259,7 @@ class OrderInvoiceCore extends ObjectModel
 		{
 			// sum by taxes
 			$taxes_infos = Db::getInstance()->executeS('
-			SELECT odt.`id_order_detail`, t.`rate` AS `name`, t.`rate`, SUM(`total_amount`) AS `total_amount`
+			SELECT odt.`id_order_detail`, t.`rate` AS `name`, t.`rate`, SUM(`total_amount`) AS `total_amount`, od.`total_price_tax_incl`, od.`total_price_tax_excl`
 			FROM `'._DB_PREFIX_.'order_detail_tax` odt
 			LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = odt.`id_tax`)
 			LEFT JOIN `'._DB_PREFIX_.'order_detail` od ON (od.`id_order_detail` = odt.`id_order_detail`)
@@ -269,39 +269,70 @@ class OrderInvoiceCore extends ObjectModel
 			');
 
 			// format response
-			$tmp_tax_infos = array();
 			foreach ($taxes_infos as $tax_infos)
 			{
-				$tmp_tax_infos[$tax_infos['rate']]['total_amount'] = $tax_infos['total_amount'];
-				$tmp_tax_infos[$tax_infos['rate']]['name'] = $tax_infos['name'];
+				if (!isset($tmp_tax_infos[$tax_infos['rate']]))
+					$tmp_tax_infos[$tax_infos['rate']] = array(
+						'total_amount' => 0,
+						'total_price_tax_excl' => 0,
+						'total_price_tax_incl' => 0,
+					);
+
+				$ratio = $tax_infos['total_price_tax_incl'] / $this->total_products_wt;
+				$order_reduction_amount = $this->total_discount_tax_incl * $ratio;
+				$tmp_tax_infos[$tax_infos['rate']]['total_amount'] += $tax_infos['total_amount'];
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_excl'] += $tax_infos['total_price_tax_incl'] - $tax_infos['total_amount'] - $order_reduction_amount - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'], 2);
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_incl'] += $tax_infos['total_price_tax_incl'] - $order_reduction_amount - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'], 2);
 			}
 
 			$shipping_taxes = Db::getInstance()->executeS('
-			SELECT *
-			FROM `'._DB_PREFIX_.'order_invoice_tax` od
-			LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = od.`id_tax`)
-			WHERE `id_order_invoice` = '.(int)$this->id
+			SELECT oit.*, t.*, oi.`total_shipping_tax_incl`, oi.`total_shipping_tax_excl`
+			FROM `'._DB_PREFIX_.'order_invoice_tax` oit
+			LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = oit.`id_tax`)
+			LEFT JOIN `'._DB_PREFIX_.'order_invoice` oi ON (oi.`id_order_invoice` = oit.`id_order_invoice`)
+			WHERE oit.`id_order_invoice` = '.(int)$this->id
 			);
 
 			foreach ($shipping_taxes as $tax_infos)
 			{
 				if (!isset($tmp_tax_infos[$tax_infos['rate']]))
-				{
-					$tmp_tax_infos[$tax_infos['rate']]['total_amount'] = 0;
-					$tmp_tax_infos[$tax_infos['rate']]['name'] = 0;
-				}
+					$tmp_tax_infos[$tax_infos['rate']] = array(
+						'total_amount' => 0,
+						'total_price_tax_excl' => 0,
+						'total_price_tax_incl' => 0,
+					);
 
 				$tmp_tax_infos[$tax_infos['rate']]['total_amount'] += $tax_infos['amount'];
-				$tmp_tax_infos[$tax_infos['rate']]['name'] += $tax_infos['rate'];
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_excl'] += $tax_infos['total_shipping_tax_excl'];
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_incl'] += $tax_infos['total_shipping_tax_incl'];
 			}
 
+			if (!empty($this->total_wrapping_tax_incl))
+			{
+				$order = new Order((int)$this->id_order);
+				$id_address = (int)$order->{Configuration::get('PS_TAX_ADDRESS_TYPE')};
+				$address = Address::initialize($id_address);
+				$tax_manager = TaxManagerFactory::getManager($address, (int)Configuration::get('PS_GIFT_WRAPPING_TAX_RULES_GROUP'));
+				$tax_calculator = $tax_manager->getTaxCalculator();
+				$wrapping_taxes_rate = number_format($tax_calculator->getTotalRate(), 3);
 
+				if (!isset($tmp_tax_infos[$wrapping_taxes_rate]))
+				{
+					$tmp_tax_infos[$wrapping_taxes_rate]['total_amount'] = 0;
+					$tmp_tax_infos[$wrapping_taxes_rate]['total_price_tax_excl'] = 0;
+					$tmp_tax_infos[$wrapping_taxes_rate]['total_price_tax_incl'] = 0;
+				}
+
+				$tmp_tax_infos[$wrapping_taxes_rate]['total_amount'] += $this->total_wrapping_tax_incl - $this->total_wrapping_tax_excl;
+				$tmp_tax_infos[$wrapping_taxes_rate]['total_price_tax_excl'] += (float)$this->total_wrapping_tax_excl;
+				$tmp_tax_infos[$wrapping_taxes_rate]['total_price_tax_incl'] += (float)$this->total_wrapping_tax_incl;
+			}
 		}
 		else
 		{
 			// sum by order details in order to retrieve real taxes rate
 			$taxes_infos = Db::getInstance()->executeS('
-			SELECT odt.`id_order_detail`, t.`rate` AS `name`, od.`total_price_tax_excl` AS total_price_tax_excl, SUM(t.`rate`) AS rate, SUM(`total_amount`) AS `total_amount`, od.`ecotax`, od.`ecotax_tax_rate`, od.`product_quantity`
+			SELECT odt.`id_order_detail`, t.`rate` AS `name`, od.`total_price_tax_excl` AS total_price_tax_excl, od.`total_price_tax_incl`, SUM(t.`rate`) AS rate, SUM(`total_amount`) AS `total_amount`, od.`ecotax`, od.`ecotax_tax_rate`, od.`product_quantity`
 			FROM `'._DB_PREFIX_.'order_detail_tax` odt
 			LEFT JOIN `'._DB_PREFIX_.'tax` t ON (t.`id_tax` = odt.`id_tax`)
 			LEFT JOIN `'._DB_PREFIX_.'order_detail` od ON (od.`id_order_detail` = odt.`id_order_detail`)
@@ -317,15 +348,15 @@ class OrderInvoiceCore extends ObjectModel
 				if (!isset($tmp_tax_infos[$tax_infos['rate']]))
 					$tmp_tax_infos[$tax_infos['rate']] = array(
 						'total_amount' => 0,
-						'name' => 0,
-						'total_price_tax_excl' => 0
+						'total_price_tax_excl' => 0,
+						'total_price_tax_incl' => 0,
 					);
 
-				$ratio = $tax_infos['total_price_tax_excl'] / $this->total_products;
-				$order_reduction_amount = $this->total_discount_tax_excl * $ratio;
-				$tmp_tax_infos[$tax_infos['rate']]['total_amount'] += ($tax_infos['total_amount'] - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'] * $tax_infos['ecotax_tax_rate'] / 100, 2));
-				$tmp_tax_infos[$tax_infos['rate']]['name'] = $tax_infos['name'];
-				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_excl'] += $tax_infos['total_price_tax_excl'] - $order_reduction_amount - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'], 2);
+				$ratio = $tax_infos['total_price_tax_incl'] / $this->total_products_wt;
+				$order_reduction_amount = $this->total_discount_tax_incl * $ratio;
+				$tmp_tax_infos[$tax_infos['rate']]['total_amount'] += $tax_infos['total_amount'];
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_excl'] += $tax_infos['total_price_tax_incl'] - $tax_infos['total_amount'] - $order_reduction_amount - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'], 2);
+				$tmp_tax_infos[$tax_infos['rate']]['total_price_tax_incl'] += $tax_infos['total_price_tax_incl'] - $order_reduction_amount - Tools::ps_round($tax_infos['ecotax'] * $tax_infos['product_quantity'], 2);
 			}
 		}
 
@@ -357,7 +388,8 @@ class OrderInvoiceCore extends ObjectModel
 			$taxes_breakdown[] = array(
 				'rate' => $order->carrier_tax_rate,
 				'total_amount' => $shipping_tax_amount,
-				'total_tax_excl' => $this->total_shipping_tax_excl
+				'total_tax_excl' => $this->total_shipping_tax_excl,
+				'total_tax_incl' => $this->total_shipping_tax_incl,
 			);
 
 		return $taxes_breakdown;
@@ -365,14 +397,26 @@ class OrderInvoiceCore extends ObjectModel
 
 	/**
 	 * Returns the wrapping taxes breakdown
-	 * @todo
-
+	 *
+	 * @param $address AddressCore
 	 * @since 1.5
 	 * @return array
 	 */
-	public function getWrappingTaxesBreakdown()
+	public function getWrappingTaxesBreakdown($address = null)
 	{
 		$taxes_breakdown = array();
+
+		// wrapping cost is added in the product taxes breakdown
+		if ($this->useOneAfterAnotherTaxComputationMethod() || is_null($address) || $this->total_wrapping_tax_incl == 0)
+			return $taxes_breakdown;
+
+		$tax_manager = TaxManagerFactory::getManager($address, (int)Configuration::get('PS_GIFT_WRAPPING_TAX_RULES_GROUP'));
+		$tax_calculator = $tax_manager->getTaxCalculator();
+		$taxes_breakdown['rate'] = number_format($tax_calculator->getTotalRate(), 3);
+		$taxes_breakdown['total_amount'] 	= $this->total_wrapping_tax_incl - $this->total_wrapping_tax_excl;
+		$taxes_breakdown['total_tax_excl'] 	= (float)$this->total_wrapping_tax_excl;
+		$taxes_breakdown['total_tax_incl'] 	= (float)$this->total_wrapping_tax_incl;
+
 		return $taxes_breakdown;
 	}
 

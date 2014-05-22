@@ -97,7 +97,7 @@ class HTMLTemplateInvoiceCore extends HTMLTemplate
 				'product_tax_breakdown' => $this->order_invoice->getProductTaxesBreakdown(),
 				'shipping_tax_breakdown' => $this->order_invoice->getShippingTaxesBreakdown($this->order),
 				'ecotax_tax_breakdown' => $this->order_invoice->getEcoTaxTaxesBreakdown(),
-				'wrapping_tax_breakdown' => $this->order_invoice->getWrappingTaxesBreakdown(),
+				'wrapping_tax_breakdown' => $this->order_invoice->getWrappingTaxesBreakdown($address),
 				'order' => $this->order,
 				'order_invoice' => $this->order_invoice,
 				'carrier' => $carrier
