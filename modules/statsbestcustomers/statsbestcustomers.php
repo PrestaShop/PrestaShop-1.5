@@ -41,7 +41,7 @@ class StatsBestCustomers extends ModuleGrid
 	{
 		$this->name = 'statsbestcustomers';
 		$this->tab = 'analytics_stats';
-		$this->version = 1.0;
+		$this->version = '1.1';
 		$this->author = 'PrestaShop';
 		$this->need_instance = 0;
 		
@@ -140,15 +140,30 @@ class StatsBestCustomers extends ModuleGrid
 	{
 		$this->_query = '
 		SELECT SQL_CALC_FOUND_ROWS c.`id_customer`, c.`lastname`, c.`firstname`, c.`email`,
-			COUNT(co.`id_connections`) as totalVisits,
-			IFNULL((
-				SELECT ROUND(SUM(IFNULL(o.`total_paid_real`, 0) / cu.conversion_rate), 2) 
-				FROM `'._DB_PREFIX_.'orders` o
-				LEFT JOIN `'._DB_PREFIX_.'currency` cu ON o.id_currency = cu.id_currency
-				WHERE o.id_customer = c.id_customer
-				AND o.invoice_date BETWEEN '.$this->getDate().'
-				AND o.valid
-			), 0) as totalMoneySpent,
+			COUNT(co.`id_connections`) as totalVisits,';
+		if (version_compare(_PS_VERSION_ , '1.5.0.1') >= 0) // if 1.5.0.1 or higher
+		// use order_payment instead of total_paid_real
+			$this->_query .= '
+				IFNULL((
+					SELECT ROUND(SUM(IFNULL(op.`amount`, 0) / cu.conversion_rate), 2)
+					FROM `'._DB_PREFIX_.'orders` o
+					LEFT JOIN `'._DB_PREFIX_.'order_payment` op ON o.reference = op.order_reference
+					LEFT JOIN `'._DB_PREFIX_.'currency` cu ON o.id_currency = cu.id_currency
+					WHERE o.id_customer = c.id_customer
+					AND o.invoice_date BETWEEN '.$this->getDate().'
+					AND o.valid
+				), 0) as totalMoneySpent,';
+		else
+			$this->_query .= '
+				IFNULL((
+					SELECT ROUND(SUM(IFNULL(o.`total_paid_real`, 0) / cu.conversion_rate), 2)
+					FROM `'._DB_PREFIX_.'orders` o
+					LEFT JOIN `'._DB_PREFIX_.'currency` cu ON o.id_currency = cu.id_currency
+					WHERE o.id_customer = c.id_customer
+					AND o.invoice_date BETWEEN '.$this->getDate().'
+					AND o.valid
+				), 0) as totalMoneySpent,';
+		$this->_query .= '
 			IFNULL((
 				SELECT COUNT(*)
 				FROM `'._DB_PREFIX_.'orders` o
