@@ -1325,7 +1325,9 @@ abstract class ObjectModelCore
 	{
 		if (!Shop::isTableAssociated($this->def['table']) || !Shop::isFeatureActive())
 			return false; 
-		return (bool)Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.$this->def['table'].'_shop` WHERE `'.$this->def['primary'].'` = '.(int)$this->id);
+		if(Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.$this->def['table'].'_shop` WHERE `'.$this->def['primary'].'` = '.(int)$this->id) = 1)
+			return false;
+		return true;
 	}
 
 	public function isMultishop()
