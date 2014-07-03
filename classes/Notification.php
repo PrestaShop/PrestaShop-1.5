@@ -50,8 +50,12 @@ class NotificationCore
 				WHERE `id_employee` = '.(int)$cookie->id_employee);
 
 		foreach ($this->types as $type)
-			$notifications[$type] = Notification::getLastElementsIdsByType($type, $employee_infos['id_last_'.$type]);
-
+		{
+			if ($employee_infos['id_last_'.$type] != '0')
+				$notifications[$type] = Notification::getLastElementsIdsByType($type, $employee_infos['id_last_'.$type]);
+			else
+				$notifications[$type] = array();
+		}
 		return $notifications;
 	}
 
