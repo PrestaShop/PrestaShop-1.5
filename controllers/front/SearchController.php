@@ -80,6 +80,7 @@ class SearchControllerCore extends FrontController
 				'search_products' => $search['result'],
 				'nbProducts' => $search['total'],
 				'search_query' => $query,
+				'instantSearch' => $this->instant_search, // DEPRECATED, specific for 1.5
 				'instant_search' => $this->instant_search,
 				'homeSize' => Image::getSize(ImageType::getFormatedName('home'))));
 		}
