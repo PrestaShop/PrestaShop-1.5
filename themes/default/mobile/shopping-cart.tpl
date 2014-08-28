@@ -41,17 +41,7 @@
 								<tr>
 									<td>{displayPrice price=$product.price_wt}</td>
 									<td>
-										<input
-											type="number"
-											class="qty-field cart_quantity_input"
-											name="product_cart_quantity_{$product.id_product}"
-											value="{$product.cart_quantity}"
-											min="0"
-											max="{$product.quantity_available}"
-											data-mini="true"
-											data-initial-quantity="{$product.cart_quantity}"
-											data-id-product="{$product.id_product}"
-											data-id-product-attribute="{$product.id_product_attribute}" />
+										<input type="number" class="qty-field cart_quantity_input" name="product_cart_quantity_{$product.id_product}" value="{$product.cart_quantity}" min="0" max="{$product.quantity_available}" data-mini="true" data-initial-quantity="{$product.cart_quantity}" data-id-product="{$product.id_product}" data-id-product-attribute="{$product.id_product_attribute}"/>
 									</td>
 									<td class="right">{displayPrice price=$product.total_wt}</td>
 								</tr>
