@@ -1938,8 +1938,7 @@ class CartCore extends ObjectModel
 				// No carriers available
 				if (count($package['carrier_list']) == 1 && current($package['carrier_list']) == 0)
 				{	
-					$cache = array();
-					return $cache;
+					continue;
 				}
 
 				$carriers_price[$id_address][$id_package] = array();
