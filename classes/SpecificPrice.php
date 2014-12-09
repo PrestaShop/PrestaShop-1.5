@@ -156,16 +156,16 @@ class SpecificPriceCore extends ObjectModel
      */
 	public static function getIdsByProductId($id_product, $id_product_attribute = false, $id_cart = 0)
 	{
-        $where_clause_product_attribute = $id_product_attribute ? ' AND id_product_attribute = '.(int)$id_product_attribute : '';
-        $where_clause_cart = $id_cart ? ' AND id_cart = '.(int)$id_cart : '';
+		$where_clause_product_attribute = $id_product_attribute ? ' AND id_product_attribute = '.(int)$id_product_attribute : '';
+		$where_clause_cart = $id_cart ? ' AND id_cart = '.(int)$id_cart : '';
 
 		return Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
 			SELECT `id_specific_price`
 			FROM `'._DB_PREFIX_.'specific_price`
 			WHERE `id_product` = '.(int)$id_product.
-            $where_clause_product_attribute.
+			$where_clause_product_attribute.
 			$where_clause_cart
-        );
+		);
 	}
 
 	/**
