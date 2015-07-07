@@ -47,7 +47,7 @@ class AdminLoginControllerCore extends AdminController
 		$this->addJqueryUI('effects.shake');
 		$this->addJqueryUI('effects.slide');
 	}
-	
+
 	public function initContent()
 	{
 		if ((empty($_SERVER['HTTPS']) || strtolower($_SERVER['HTTPS']) == 'off') && Configuration::get('PS_SSL_ENABLED'))
@@ -70,9 +70,9 @@ class AdminLoginControllerCore extends AdminController
 
 		if (file_exists(_PS_ADMIN_DIR_.'/../install'))
 			$this->context->smarty->assign('wrong_install_name', true);
-		
+
 		if (basename(_PS_ADMIN_DIR_) == 'admin' && file_exists(_PS_ADMIN_DIR_.'/../admin/'))
-		{	
+		{
 			$rand = 'admin'.sprintf('%04d', rand(0, 9999)).'/';
 			if (@rename(_PS_ADMIN_DIR_.'/../admin/', _PS_ADMIN_DIR_.'/../'.$rand))
 				Tools::redirectAdmin('../'.$rand);
@@ -111,7 +111,7 @@ class AdminLoginControllerCore extends AdminController
 		parent::initContent();
 		$this->initFooter();
 	}
-	
+
 	public function checkToken()
 	{
 		return true;
@@ -126,7 +126,7 @@ class AdminLoginControllerCore extends AdminController
 	{
 		return true;
 	}
-	
+
 	public function postProcess()
 	{
 		if (Tools::isSubmit('submitLogin'))
@@ -134,7 +134,7 @@ class AdminLoginControllerCore extends AdminController
 		elseif (Tools::isSubmit('submitForgot'))
 			$this->processForgot();
 	}
-	
+
 	public function processLogin()
 	{
 		/* Check fields validity */
@@ -149,7 +149,7 @@ class AdminLoginControllerCore extends AdminController
 			$this->errors[] = Tools::displayError('The password field is blank.');
 		elseif (!Validate::isPasswd($passwd))
 			$this->errors[] = Tools::displayError('Invalid password.');
-			
+
 		if (!count($this->errors))
 		{
 			// Find employee
@@ -196,7 +196,7 @@ class AdminLoginControllerCore extends AdminController
 		if (Tools::isSubmit('ajax'))
 			die(Tools::jsonEncode(array('hasErrors' => true, 'errors' => $this->errors)));
 	}
-	
+
 	public function processForgot()
 	{
 		if (_PS_MODE_DEMO_)
@@ -218,8 +218,8 @@ class AdminLoginControllerCore extends AdminController
 		}
 
 		if (!count($this->errors))
-		{	
-			$pwd = Tools::passwdGen();
+		{
+			$pwd = Tools::passwdGen(10, 'RANDOM');
 			$employee->passwd = md5(pSQL(_COOKIE_KEY_.$pwd));
 			$employee->last_passwd_gen = date('Y-m-d H:i:s', time());
 
@@ -229,7 +229,7 @@ class AdminLoginControllerCore extends AdminController
 				'{firstname}' => $employee->firstname,
 				'{passwd}' => $pwd
 			);
-						
+
 			if (Mail::Send($employee->id_lang, 'password', Mail::l('Your new password', $employee->id_lang), $params, $employee->email, $employee->firstname.' '.$employee->lastname))
 			{
 				// Update employee only if the mail can be sent
@@ -247,7 +247,7 @@ class AdminLoginControllerCore extends AdminController
 					'hasErrors' => true,
 					'errors' => array(Tools::displayError('An error occurred while attempting to change your password.'))
 				)));
-		
+
 		}
 		else if (Tools::isSubmit('ajax'))
 			die(Tools::jsonEncode(array('hasErrors' => true, 'errors' => $this->errors)));

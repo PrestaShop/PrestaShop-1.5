@@ -34,11 +34,16 @@ class ToolsCore
 	* Random password generator
 	*
 	* @param integer $length Desired length (optional)
-	* @param string $flag Output type (NUMERIC, ALPHANUMERIC, NO_NUMERIC)
-	* @return string Password
+	* @param string $flag Output type (NUMERIC, ALPHANUMERIC, NO_NUMERIC, RANDOM)
+	* @return string|boolean Password
 	*/
 	public static function passwdGen($length = 8, $flag = 'ALPHANUMERIC')
 	{
+		$length = (int)$length;
+
+		if ($length <= 0)
+			return false;
+
 		switch ($flag)
 		{
 			case 'NUMERIC':
@@ -47,14 +52,83 @@ class ToolsCore
 			case 'NO_NUMERIC':
 				$str = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 				break;
+			case 'RANDOM':
+				$num_bytes = ceil($length * 0.75);
+				$bytes = Tools::getBytes($num_bytes);
+				return substr(rtrim(base64_encode($bytes), '='), 0, $length);
+			case 'ALPHANUMERIC':
 			default:
 				$str = 'abcdefghijkmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 				break;
 		}
 
-		for ($i = 0, $passwd = ''; $i < $length; $i++)
-			$passwd .= Tools::substr($str, mt_rand(0, Tools::strlen($str) - 1), 1);
-		return $passwd;
+		$bytes = Tools::getBytes($length);
+		$position = 0;
+		$result = '';
+
+		for ($i = 0; $i < $length; $i++)
+		{
+			$position = ($position + ord($bytes[$i])) % strlen($str);
+			$result .= $str[$position];
+		}
+
+		return $result;
+	}
+
+	public static function getBytes($length)
+	{
+		$length = (int)$length;
+		if ($length <= 0)
+			return false;
+		if (function_exists('openssl_random_pseudo_bytes'))
+		{
+			$bytes = openssl_random_pseudo_bytes($length, $crypto_strong);
+			if ($crypto_strong === true)
+				return $bytes;
+		}
+		if (function_exists('mcrypt_create_iv'))
+		{
+			$bytes = mcrypt_create_iv($length, MCRYPT_DEV_URANDOM);
+			if ($bytes !== false && strlen($bytes) === $length)
+				return $bytes;
+		}
+		// Else try to get $length bytes of entropy
+		$result         = '';
+		$entropy        = '';
+		$msec_per_round = 400;
+		$bits_per_round = 2;
+		$total          = $length;
+		$hash_length    = 20;
+		while (strlen($result) < $length)
+		{
+			$bytes  = ($total > $hash_length) ? $hash_length : $total;
+			$total -= $bytes;
+			for ($i=1; $i < 3; $i++)
+			{
+				$t1 = microtime(true);
+				$seed = mt_rand();
+				for ($j=1; $j < 50; $j++)
+					$seed = sha1($seed);
+				$t2 = microtime(true);
+				$entropy .= $t1 . $t2;
+			}
+			$div = (int) (($t2 - $t1) * 1000000);
+			if ($div <= 0)
+				$div = 400;
+			$rounds = (int) ($msec_per_round * 50 / $div);
+			$iter = $bytes * (int) (ceil(8 / $bits_per_round));
+			for ($i = 0; $i < $iter; $i ++)
+			{
+				$t1 = microtime();
+				$seed = sha1(mt_rand());
+				for ($j = 0; $j < $rounds; $j++)
+					$seed = sha1($seed);
+				$t2 = microtime();
+				$entropy .= $t1 . $t2;
+			}
+			$result .= sha1($entropy, true);
+		}
+		return substr($result, 0, $length);
 	}
 
 	public static function strReplaceFirst($search, $replace, $subject, $cur = 0)
@@ -348,7 +422,7 @@ class ToolsCore
 		{
 			$array  = explode(',', Tools::strtolower($_SERVER['HTTP_ACCEPT_LANGUAGE']));
 			$string = $array[0];
-			
+
 			if (Validate::isLanguageCode($string))
 			{
 				$lang = Language::getLanguageByIETFCode($string);
@@ -369,7 +443,7 @@ class ToolsCore
 
 		$iso = Language::getIsoById((int)$cookie->id_lang);
 		@include_once(_PS_THEME_DIR_.'lang/'.$iso.'.php');
-		
+
 		return $iso;
 	}
 
@@ -380,7 +454,7 @@ class ToolsCore
 	{
 		if (!$context)
 			$context = Context::getContext();
-		
+
 		// Install call the dispatcher and so the switchLanguage
 		// Stop this method by checking the cookie
 		if (!isset($context->cookie))
@@ -422,7 +496,7 @@ class ToolsCore
 				if (is_object($currency) && $currency->id && !$currency->deleted && $currency->isAssociatedToShop())
 					$cookie->id_currency = (int)$currency->id;
 			}
-		
+
 		$currency = Currency::getCurrencyInstance(Configuration::get('PS_CURRENCY_DEFAULT'));
 		if ((int)$cookie->id_currency)
 			$currency = Currency::getCurrencyInstance((int)$cookie->id_currency);
@@ -634,8 +708,8 @@ class ToolsCore
 		if ($id_lang !== null)
 			Tools::displayParameterAsDeprecated('id_lang');
 		if ($separator !== null)
-			Tools::displayParameterAsDeprecated('separator');	
-			
+			Tools::displayParameterAsDeprecated('separator');
+
 		if (!$date || !($time = strtotime($date)))
 			return $date;
 
@@ -710,7 +784,7 @@ class ToolsCore
 				if ($delete_self)
 					if (!rmdir($dirname))
                         return false;
-                return true;                    
+                return true;
 			}
         return false;
     }
@@ -729,7 +803,7 @@ class ToolsCore
 		if (file_exists($file) && is_file($file) && array_search(basename($file), $exclude_files) === FALSE)
 			unlink($file);
     }
-    
+
 	/**
 	* Clear smarty cache folders
  	*/
@@ -740,7 +814,7 @@ class ToolsCore
 				foreach (scandir($dir) as $file)
 					if ($file[0] != '.' && $file != 'index.php')
 						self::deleteDirectory($dir.DIRECTORY_SEPARATOR.$file);
-	}   
+	}
 
 	/**
 	* Display an error according to an error code
@@ -793,10 +867,10 @@ class ToolsCore
 	public static function fd($object, $type = 'log')
 	{
 		$types = array('log', 'debug', 'info', 'warn', 'error', 'assert');
-		
+
 		if(!in_array($type, $types))
 			$type = 'log';
-		
+
 		echo '
 			<script type="text/javascript">
 				console.'.$type.'('.Tools::jsonEncode($object).');
@@ -813,14 +887,14 @@ class ToolsCore
 	{
 		return (Tools::dieObject($object, $kill));
 	}
-	
+
 	public static function debug_backtrace($start = 0, $limit = null)
 	{
 		$backtrace = debug_backtrace();
 		array_shift($backtrace);
 		for ($i = 0; $i < $start; ++$i)
 			array_shift($backtrace);
-		
+
 		echo '
 		<div style="margin:10px;padding:10px;border:1px solid #666666">
 			<ul>';
@@ -1182,7 +1256,7 @@ class ToolsCore
 			/* YO */ '/[\x{0401}]/u',
 			/* YU */ '/[\x{042E}]/u',
 			/* ZH */ '/[\x{0416}]/u');
-			
+
 			// ö to oe
 			// å to aa
 			// ä to ae
@@ -1225,7 +1299,7 @@ class ToolsCore
 
 		if ($html)
 		{
-			if (Tools::strlen(preg_replace('/<.*?>/', '', $text)) <= $length) 
+			if (Tools::strlen(preg_replace('/<.*?>/', '', $text)) <= $length)
 				return $text;
 
 			$totalLength = Tools::strlen(strip_tags($ellipsis));
@@ -1439,7 +1513,7 @@ class ToolsCore
 		if (function_exists('mb_strrpos'))
 			return mb_strrpos($str, $find, $offset, $encoding);
 		return strrpos($str, $find, $offset);
-	}	
+	}
 
 	public static function ucfirst($str)
 	{
@@ -1603,7 +1677,7 @@ class ToolsCore
 	{
 		return @simplexml_load_string(Tools::file_get_contents($url), $class_name);
 	}
-	
+
 	public static function copy($source, $destination, $stream_context = null)
 	{
 		if (is_null($stream_context) && !preg_match('/^https?:\/\//', $source))
@@ -1840,10 +1914,10 @@ class ToolsCore
 				'virtual' =>	$shop_url->virtual_uri,
 				'id_shop' =>	$shop_url->id_shop
 			);
-			
+
 			if ($shop_url->domain == $shop_url->domain_ssl)
 				continue;
-			
+
 			if (!isset($domains[$shop_url->domain_ssl]))
 				$domains[$shop_url->domain_ssl] = array();
 
@@ -1875,10 +1949,10 @@ class ToolsCore
 			fwrite($write_fd, "\n# Disable Multiviews\nOptions -Multiviews\n\n");
 
 		fwrite($write_fd, "RewriteEngine on\n");
-	
+
 		if (!$medias)
 			$medias = array(_MEDIA_SERVER_1_, _MEDIA_SERVER_2_, _MEDIA_SERVER_3_);
-		
+
 		$media_domains = '';
 		if ($medias[0] != '')
 			$media_domains = 'RewriteCond %{HTTP_HOST} ^'.$medias[0].'$ [OR]'."\n";
@@ -1897,7 +1971,7 @@ class ToolsCore
 			{
 				fwrite($write_fd, 'RewriteCond %{HTTP_HOST} ^'.$domain.'$'."\n");
 				fwrite($write_fd, 'RewriteRule . - [E=REWRITEBASE:'.$uri['physical'].']'."\n");
-				
+
 				// Webservice
 				fwrite($write_fd, 'RewriteRule ^api/?(.*)$ %{ENV:REWRITEBASE}webservice/dispatcher.php?url=$1 [QSA,L]'."\n\n");
 
@@ -1923,7 +1997,7 @@ class ToolsCore
 					fwrite($write_fd, $media_domains);
 					fwrite($write_fd, $domain_rewrite_cond);
 					fwrite($write_fd, 'RewriteRule ^'.ltrim($uri['virtual'], '/').'(.*) '.$uri['physical']."$1 [L]\n\n");
-				}			
+				}
 
 				if ($rewrite_settings)
 				{
@@ -1960,7 +2034,7 @@ class ToolsCore
 					fwrite($write_fd, $domain_rewrite_cond);
 					fwrite($write_fd, 'RewriteRule ^c/([a-zA-Z_-]+)(-[0-9]+)?/.+\.jpg$ %{ENV:REWRITEBASE}img/c/$1$2.jpg [L]'."\n");
 				}
-				
+
 				fwrite($write_fd, "# AlphaImageLoader for IE and fancybox\n");
 				fwrite($write_fd, $domain_rewrite_cond);
 				fwrite($write_fd, 'RewriteRule ^images_ie/?([^/]+)\.(jpe?g|png|gif)$ js/jquery/plugins/fancybox/images/$1.$2 [L]'."\n");
@@ -2021,7 +2095,7 @@ FileETag INode MTime Size
 
 		return true;
 	}
-	
+
 	public static function getDefaultIndexContent()
 	{
 		return '<?php
@@ -2060,7 +2134,7 @@ header("Pragma: no-cache");
 header("Location: ../");
 exit;
 ';
-		
+
 	}
 
 	/**
@@ -2136,7 +2210,7 @@ exit;
 		$error = 'File <b>'.$callee['file'].'</b> is deprecated<br />';
 		$message = 'The file '.$callee['file'].' is deprecated and will be removed in the next major version.';
 		$class = isset($callee['class']) ? $callee['class'] : null;
-		
+
 		Tools::throwDeprecated($error, $message, $class);
 	}
 
@@ -2646,9 +2720,9 @@ exit;
 
 		return false;
 	}
-	
+
 	/**
-	 * Reproduce array_unique working before php version 5.2.9 
+	 * Reproduce array_unique working before php version 5.2.9
 	 * @param array $array
 	 * @return array
 	 */
@@ -2740,7 +2814,7 @@ exit;
 		$fileAttachment = null;
 		if (isset($_FILES[$input]['name']) && !empty($_FILES[$input]['name']) && !empty($_FILES[$input]['tmp_name']))
 		{
-			$fileAttachment['rename'] = uniqid(). Tools::strtolower(substr($_FILES[$input]['name'], -5));	
+			$fileAttachment['rename'] = uniqid(). Tools::strtolower(substr($_FILES[$input]['name'], -5));
 			$fileAttachment['content'] = file_get_contents($_FILES[$input]['tmp_name']);
 			$fileAttachment['tmp_name'] = $_FILES[$input]['tmp_name'];
 			$fileAttachment['name'] = $_FILES[$input]['name'];
