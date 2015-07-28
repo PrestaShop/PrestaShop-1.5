@@ -40,8 +40,10 @@
 			{include file="controllers/products/input_text_lang.tpl"
 				languages=$languages
 				input_name='meta_title'
+				input_size=70
+				input_maxlength=70
 				input_value=$product->meta_title}
-			<p class="preference_description">{l s='Product page title: Leave blank to use the product name'}</p>
+			<p class="preference_description">{l s='Product page title, recommended maxlength 70 chars incl. blanks. Leave blank to use the product name'}</p>
 		</td>
 	</tr>
 	<tr>
@@ -53,9 +55,11 @@
 			{include file="controllers/products/input_text_lang.tpl"
 				languages=$languages
 				input_name='meta_description'
+				input_size=160
+				input_maxlength=160
 				input_value=$product->meta_description
 				input_hint='{l s=\'Forbidden characters:\'\} <>;=#{\}'}
-			<p class="preference_description">{l s='A single sentence for the HTML header is needed. '}</p>
+			<p class="preference_description">{l s='A single sentence for the HTML header is needed. Recommended maxlength 156 chars incl. blanks.'}</p>
 		</td>
 	</tr>
 	<tr>
