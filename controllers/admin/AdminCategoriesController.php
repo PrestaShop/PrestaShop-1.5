@@ -417,6 +417,8 @@ class AdminCategoriesControllerCore extends AdminController
 					'label' => $this->l('Meta title:'),
 					'name' => 'meta_title',
 					'lang' => true,
+					'size' => 70,
+					'desc' => $this->l('Input limited to 70 chars.'),
 					'hint' => $this->l('Forbidden characters:').' <>;=#{}'
 				),
 				array(
@@ -424,6 +426,9 @@ class AdminCategoriesControllerCore extends AdminController
 					'label' => $this->l('Meta description:'),
 					'name' => 'meta_description',
 					'lang' => true,
+					'size' => 160,
+					'maxlength' => 160,
+					'desc' => $this->l('Input limited to 160 chars. Try to avoid more than 156 chars including blanks.'),
 					'hint' => $this->l('Forbidden characters:').' <>;=#{}'
 				),
 				array(
