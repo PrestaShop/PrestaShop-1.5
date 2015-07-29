@@ -414,10 +414,14 @@ class AdminMetaControllerCore extends AdminController
 			// Files
 			if (count($this->rb_data['Files']))
 			{
+				$languages = Language::getLanguages();
 				fwrite($write_fd, "# Files\n");
 				foreach ($this->rb_data['Files'] as $iso_code => $files)
 					foreach ($files as $file)
-						fwrite($write_fd, 'Disallow: /*'.$iso_code.'/'.$file."\n");
+						if (count($languages) > 1)
+							fwrite($write_fd, 'Disallow: /*'.$iso_code.'/'.$file."\n");
+						else
+							fwrite($write_fd, 'Disallow: /'.$file."\n");
 			}
 			
 			// Sitemap
