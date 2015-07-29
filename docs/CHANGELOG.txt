@@ -24,6 +24,38 @@ International Registred Trademark & Property of PrestaShop SA
 Release Notes for PrestaShop 1.5
 --------------------------------
 ####################################
+#   v1.5.6.3 - (2015-07-29)  #
+####################################
+
+	Improved/changed features:
+
+	[*] BO : Fix #PSCFV-11705, save availability date when adding new combination
+	[*] BO : Hook displayBackOfficeHeader is now executed even if the module is disabled
+
+	[*] CORE : Add Random charlist to passwdGen
+
+	Fixed bugs:
+
+	[-] FO : Fix additional space #PSCFV-12536
+	[-] FO : Fix bug #PSCFV-12003, robots.txt without unactive languages
+	[-] FO: Fix bug #PSCFV-12160 pagination with instant search
+	[-] FO : Fixed Fatal error
+	[-] FO : Fix bug #PSCFV-11922, Carriers not updating correctly when changing address
+
+	[-] BO : Fix bug #PSCFV-10539, memcache_connect
+	[-] BO : Bug #PSCFV-11515, Supply order autocompletion is now sorted
+	[-] BO : Fix bug #PSCFV-11166, orderslips in multishop
+	[-] BO : Fix bug #PSCFV-9880, no overrides pdf TR in FO
+	[-] BO : Bug #PSCFV-11936, Escape HTML char for Return Message
+	[-] BO : Fix bug #PSCFV-12091, default shop reset on employee pwd renewal
+	[-] BO : Fix bug #PSCFV-12030, false positive on extract return when pclzip
+
+	[-] CORE : Fix bug #PSCFV-9517, check voucher validity before order validation
+	[-] CORE : Force shop_id for 'all shops' context before sending core mails
+	[-] CORE : Fix bug #PSCFV-11298, context in single shop on module install
+
+
+####################################
 #   v1.5.6.2 - (2014-01-20)  #
 ####################################
 
