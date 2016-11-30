@@ -24,11 +24,23 @@
 *  International Registered Trademark & Property of PrestaShop SA
 */
 
+function sdefine($name, $value = null)
+{
+    if (!is_array($name)) {
+        $name = array($name => $value);
+    }
+    foreach ($name as $key=>$val) {
+        if (!defined($key)) {
+            define($key, $val);
+        }
+    }
+}
+
 require_once(dirname(__FILE__).'/defines.inc.php');
 $start_time = microtime(true);
 
 /* SSL configuration */
-define('_PS_SSL_PORT_', 443);
+sdefine('_PS_SSL_PORT_', 443);
 
 /* Improve PHP configuration to prevent issues */
 ini_set('upload_max_filesize', '100M');
